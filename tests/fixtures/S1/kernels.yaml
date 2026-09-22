@@ -1,0 +1,8 @@
+# S1 fixture: the second kernel reuses the id of product alpha.
+kernels:
+  - id: core
+    name: Core
+    capabilities: [sync]
+
+  - id: alpha
+    name: Alpha Kernel

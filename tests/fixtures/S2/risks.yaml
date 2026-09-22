@@ -1,0 +1,16 @@
+# S2 fixture: the first risk's scope names no product or kernel.
+risks:
+  - id: alpha-licence
+    scope: ghost
+    title: A dependency's licence may forbid resale
+    severity: medium
+    applies_to: [store]
+    state: open
+
+  - id: core-data-loss
+    scope: core
+    title: Two offline edits can overwrite each other
+    severity: high
+    applies_to: [all]
+    state: accepted
+    accepted_until: 2026-12-31

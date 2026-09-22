@@ -1,0 +1,4 @@
+kernels:
+  - id: core
+    name: Core
+    capabilities: [sync]
