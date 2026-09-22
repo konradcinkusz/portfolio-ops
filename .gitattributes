@@ -1,0 +1,26 @@
+# A real .gitattributes — REPO-BASELINE.md §1 names the stock template with every rule
+# commented out as decoration rather than configuration.
+
+# Normalise line endings on the way in and check out LF everywhere. The engine reports
+# line numbers and compares rendered reports byte for byte; a CRLF checkout on Windows
+# would make both disagree with what CI sees.
+* text=auto eol=lf
+
+*.py    text eol=lf diff=python
+*.md    text eol=lf diff=markdown
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.json  text eol=lf
+*.toml  text eol=lf
+
+*.png   binary
+*.jpg   binary
+
+# Fixtures and golden files are test inputs, not the product: keep them out of the
+# repository's language statistics.
+tests/fixtures/**           linguist-vendored
+tests/unit/report/golden/** linguist-vendored
+
+# The example data and the documentation are prose and data, not code.
+examples/** linguist-documentation
+docs/**     linguist-documentation

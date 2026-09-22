@@ -1,0 +1,25 @@
+# REPO-BASELINE.md §1: formatting is settled here once, not argued per editor.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# ruff format decides the rest of Python style; this only keeps editors from
+# fighting it before the formatter runs.
+[*.py]
+indent_size = 4
+max_line_length = 100
+
+# Two trailing spaces are a Markdown line break, so trimming them would silently
+# reflow documents. Golden report files are compared byte for byte.
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{json,yml,yaml,toml}]
+indent_size = 2
