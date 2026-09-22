@@ -140,3 +140,79 @@ def test_the_standards_marketplace_is_declared() -> None:
         "architecture-core@architecture-standards": True,
         "quality-and-process@architecture-standards": True,
     }
+
+
+# ------------------------------------------------------------------ the specification (AC12)
+
+# SHA-256 of docs/business-rules.md, revision r1, as committed. The spec changes only by a
+# new revision; implementation may change nothing but the Status and Entry point columns
+# of §6. A new revision updates these two constants in the same commit.
+SPEC_REVISION = "r1"
+SPEC_SHA256 = "885b90ba625f55586ed4f5cf9e6c9067dae75a52e8d2f157a19fd1a07632e498"
+CATALOGUE_ROW = re.compile(r"^\| [A-Z][0-9] \|")
+
+
+def _catalogue_rows() -> list[list[str]]:
+    section = SPEC[SPEC.index("## 6. Rule catalogue") : SPEC.index("## 7. Operational definitions")]
+    return [line.split(" | ") for line in section.splitlines() if CATALOGUE_ROW.match(line)]
+
+
+def _with_status_columns_reset(text: str) -> str:
+    start = text.index("## 6. Rule catalogue")
+    end = text.index("## 7. Operational definitions")
+    lines = [
+        " | ".join([*line.split(" | ")[:5], "planned", "— |"])
+        if CATALOGUE_ROW.match(line)
+        else line
+        for line in text[start:end].split("\n")
+    ]
+    return text[:start] + "\n".join(lines) + text[end:]
+
+
+def test_implementation_changed_nothing_in_the_spec_but_status_and_entry_point() -> None:
+    import hashlib
+
+    digest = hashlib.sha256(_with_status_columns_reset(SPEC).encode("utf-8")).hexdigest()
+
+    assert f"revision **{SPEC_REVISION}**" in SPEC
+    assert digest == SPEC_SHA256
+
+
+def test_every_phase_1_rule_is_implemented_and_its_entry_point_exists() -> None:
+    import importlib
+
+    phase_1 = [row for row in _catalogue_rows() if "1" in row[4].split(", ")]
+
+    assert [row[0][2:] for row in phase_1] == (
+        [
+            "S1",
+            "S2",
+            "S3",
+            "S4",
+            "S5",
+            "S6",
+            "S7",
+            "L1",
+            "L2",
+            "N1",
+            "N2",
+            "N3",
+            "N4",
+            "P2",
+            "R1",
+            "R2",
+            "R3",
+        ]
+    )
+    for row in phase_1:
+        assert row[5] == "implemented (v0.1.0)", row[0]
+        dotted = row[6].removesuffix(" |").strip("`")
+        module, _, name = dotted.rpartition(".")
+        assert callable(getattr(importlib.import_module(module), name)), dotted
+
+
+def test_rules_of_later_phases_stay_planned() -> None:
+    later = [row for row in _catalogue_rows() if "1" not in row[4].split(", ")]
+
+    assert later
+    assert all(row[5] == "planned" and row[6] == "— |" for row in later)

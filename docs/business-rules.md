@@ -236,23 +236,23 @@ Prefixes: S structure, L limit, N pressure, P memory, R report, B gates, K kerne
 
 | ID | Rule | Enforced by | Effect | Phase | Status | Entry point |
 |---|---|---|---|---|---|---|
-| S1 | Every `id` is a valid slug and unique across products, kernels, risks and findings; `portfolio` and `all` are reserved (§4.4) | `validate` | error | 1 | planned | — |
-| S2 | Every reference resolves: `risks[].scope`, `findings[].subject`, `products[].feeds_from[].kernel`, and every id in a decision heading | `validate` | error | 1 | planned | — |
-| S3 | Every enumerated value belongs to its vocabulary (§4.3); every decision heading follows §4.6 | `validate` | error | 1 | planned | — |
-| S4 | The fields required by a product's status are present (§5); `review_by` is no later than today plus that status's horizon; an `archived` product is named by at least one `status_change` decision | `validate` | error | 1 | planned | — |
-| S5 | `config.yaml` may extend the configured vocabularies only: it cannot redefine an engine-fixed vocabulary, and it cannot declare `all` as a context | `validate` | error | 1 | planned | — |
-| S6 | `schema_version` is present and supported by this engine version | every command | exit 2, pointing to `docs/migrations/` | 1 | planned | — |
-| S7 | A public data repository without `allow_public: true` is refused before any data file other than `config.yaml` is read (§7.3) | every command | exit 3 | 1 | planned | — |
-| L1 | The number of `active` products is at most `wip_limit`. The message lists the active products and asks to keep at most `wip_limit` of them, moving the rest to `paused` or `dormant` with a `review_by` | `validate` | error | 1 | planned | — |
-| L2 | `wip_limit` ≤ `stale_days` / 7 × `actions_per_week` (§8.1) | `validate` | warning | 1 | planned | — |
-| N1 | The clock of an `active` product is today minus the latest of: `next_action` changing to its current value, the product last becoming `active`, its latest `defer` decision (§7.2) | `report` | — | 1 | planned | — |
-| N2 | The clock exceeds `stale_days` | `report` | item under Stale | 1 | planned | — |
-| N3 | The number of `defer` decisions dated after the latest `next_action` change reaches `deferral_limit` | `report` | item under Escalations — split the action, pause or archive | 1 | planned | — |
-| N4 | A `paused` or `dormant` product's `review_by` is before today | `report` | item under Overdue reviews | 1 | planned | — |
-| P2 | Every finding has `checked_on`, and `expires_on` or a TTL configured for its type (then `expires_on` = `checked_on` + TTL); a `claim` has a non-empty `used_in` | `validate` | error | 1 | planned | — |
-| R1 | Publishing keeps exactly one open issue labelled `weekly-review` (§7.5) | `report --publish` | — | 1 | planned | — |
-| R2 | The report has fixed sections in a fixed order (§7.4); phase 2 adds Expired acceptances, Expired claims, Copy-paste debt and Changes without a decision | `report` | — | 1, 2 | planned | — |
-| R3 | The focus of the week is the latest `focus` decision; the report evaluates last week's focus and flags a week without one (§7.4) | `report` | item when no focus is recorded | 1 | planned | — |
+| S1 | Every `id` is a valid slug and unique across products, kernels, risks and findings; `portfolio` and `all` are reserved (§4.4) | `validate` | error | 1 | implemented (v0.1.0) | `portfolio_ops.rules.structure.check_ids` |
+| S2 | Every reference resolves: `risks[].scope`, `findings[].subject`, `products[].feeds_from[].kernel`, and every id in a decision heading | `validate` | error | 1 | implemented (v0.1.0) | `portfolio_ops.rules.structure.check_references` |
+| S3 | Every enumerated value belongs to its vocabulary (§4.3); every decision heading follows §4.6 | `validate` | error | 1 | implemented (v0.1.0) | `portfolio_ops.rules.structure.check_vocabularies` |
+| S4 | The fields required by a product's status are present (§5); `review_by` is no later than today plus that status's horizon; an `archived` product is named by at least one `status_change` decision | `validate` | error | 1 | implemented (v0.1.0) | `portfolio_ops.rules.structure.check_status_fields` |
+| S5 | `config.yaml` may extend the configured vocabularies only: it cannot redefine an engine-fixed vocabulary, and it cannot declare `all` as a context | `validate` | error | 1 | implemented (v0.1.0) | `portfolio_ops.rules.structure.check_config_vocabularies` |
+| S6 | `schema_version` is present and supported by this engine version | every command | exit 2, pointing to `docs/migrations/` | 1 | implemented (v0.1.0) | `portfolio_ops.loading.check_schema_version` |
+| S7 | A public data repository without `allow_public: true` is refused before any data file other than `config.yaml` is read (§7.3) | every command | exit 3 | 1 | implemented (v0.1.0) | `portfolio_ops.guard.check_visibility` |
+| L1 | The number of `active` products is at most `wip_limit`. The message lists the active products and asks to keep at most `wip_limit` of them, moving the rest to `paused` or `dormant` with a `review_by` | `validate` | error | 1 | implemented (v0.1.0) | `portfolio_ops.rules.limits.check_wip_limit` |
+| L2 | `wip_limit` ≤ `stale_days` / 7 × `actions_per_week` (§8.1) | `validate` | warning | 1 | implemented (v0.1.0) | `portfolio_ops.rules.limits.check_pressure_arithmetic` |
+| N1 | The clock of an `active` product is today minus the latest of: `next_action` changing to its current value, the product last becoming `active`, its latest `defer` decision (§7.2) | `report` | — | 1 | implemented (v0.1.0) | `portfolio_ops.history.clocks` |
+| N2 | The clock exceeds `stale_days` | `report` | item under Stale | 1 | implemented (v0.1.0) | `portfolio_ops.report.sections.stale` |
+| N3 | The number of `defer` decisions dated after the latest `next_action` change reaches `deferral_limit` | `report` | item under Escalations — split the action, pause or archive | 1 | implemented (v0.1.0) | `portfolio_ops.report.sections.escalations` |
+| N4 | A `paused` or `dormant` product's `review_by` is before today | `report` | item under Overdue reviews | 1 | implemented (v0.1.0) | `portfolio_ops.report.sections.overdue_reviews` |
+| P2 | Every finding has `checked_on`, and `expires_on` or a TTL configured for its type (then `expires_on` = `checked_on` + TTL); a `claim` has a non-empty `used_in` | `validate` | error | 1 | implemented (v0.1.0) | `portfolio_ops.rules.structure.check_findings` |
+| R1 | Publishing keeps exactly one open issue labelled `weekly-review` (§7.5) | `report --publish` | — | 1 | implemented (v0.1.0) | `portfolio_ops.report.publish.plan` |
+| R2 | The report has fixed sections in a fixed order (§7.4); phase 2 adds Expired acceptances, Expired claims, Copy-paste debt and Changes without a decision | `report` | — | 1, 2 | implemented (v0.1.0) | `portfolio_ops.report.render.render` |
+| R3 | The focus of the week is the latest `focus` decision; the report evaluates last week's focus and flags a week without one (§7.4) | `report` | item when no focus is recorded | 1 | implemented (v0.1.0) | `portfolio_ops.report.sections.focus` |
 | B1 | `gate <product> --context <ctx>` collects the risks of the product, of every kernel reachable through `feeds_from` (a kernel's risk is inherited by all its consumers) and of scope `portfolio`, keeping those whose `applies_to` contains `ctx` or `all` | `gate` | — | 2 | planned | — |
 | B2 | A collected risk is `open` with severity `high` or `critical` | `gate` | fail, exit 1 | 2 | planned | — |
 | B3 | A collected risk is `accepted` and `accepted_until` is today or later; after that date it counts as `open` | `gate` | warning | 2 | planned | — |
