@@ -1,0 +1,130 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "portfolio-ops findings.yaml",
+  "description": "What has been verified, and until when (business rules §4.5). A missing file means no findings. A constraint inside an allOf entry that carries x-rule is enforced by that rule of the engine; everything else is shape, which the engine reports as 'schema'. A key whose value is empty counts as absent.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "findings": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/finding"
+      }
+    }
+  },
+  "definitions": {
+    "id": {
+      "description": "Unique across products, kernels, risks and findings; never renamed (rule S1).",
+      "type": "string",
+      "allOf": [
+        {
+          "x-rule": "S1",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+          "not": {
+            "enum": [
+              "portfolio",
+              "all"
+            ]
+          }
+        }
+      ]
+    },
+    "finding": {
+      "type": "object",
+      "required": [
+        "id",
+        "subject",
+        "type",
+        "result"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/id"
+        },
+        "subject": {
+          "description": "A product id, a kernel id or portfolio (rule S2).",
+          "type": "string"
+        },
+        "type": {
+          "description": "claim, or a configured finding type (rule S3).",
+          "type": "string"
+        },
+        "result": {
+          "description": "What was verified.",
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "evidence": {
+          "description": "A link or a note.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "checked_on": {
+          "description": "When the result was verified (rule P2).",
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "format": "date"
+        },
+        "expires_on": {
+          "description": "When the result stops being valid; optional when finding_ttl_days sets a TTL for the type (rule P2).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "format": "date"
+        },
+        "used_in": {
+          "description": "Configured contexts where a claim is used externally (rule S3); non-empty for a claim (rule P2).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "x-rule": "P2",
+          "required": [
+            "checked_on"
+          ]
+        },
+        {
+          "x-rule": "P2",
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "const": "claim"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "used_in"
+            ],
+            "properties": {
+              "used_in": {
+                "type": "array",
+                "minItems": 1
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

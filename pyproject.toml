@@ -1,0 +1,89 @@
+# The single place for versions (REPO-BASELINE.md §1, translated to Python): runtime
+# dependencies, development tools and their pins all live here, and Dependabot keeps
+# them current. The runtime budget is two direct dependencies (ADR 0001); adding a
+# third needs an ADR of its own.
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "portfolio-ops"
+version = "0.1.0"
+description = "Validate a single owner's private portfolio data repository and keep one weekly-review issue current."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Konrad Cinkusz" }]
+requires-python = ">=3.11"
+dependencies = [
+  "PyYAML>=6.0.1,<7",
+  "jsonschema>=4.18,<5",
+]
+keywords = ["portfolio", "side-projects", "wip-limit", "weekly-review", "github-action"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Office/Business :: Scheduling",
+  "Typing :: Typed",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy==2.3.1",
+  "pip-audit==2.10.1",
+  "pre-commit==4.6.2",
+  "pytest==9.1.1",
+  "ruff==0.16.8",
+  "types-jsonschema==4.26.0.20260518",
+  "types-PyYAML==6.0.12.20260906",
+]
+
+[project.scripts]
+portfolio-ops = "portfolio_ops.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/konradcinkusz/portfolio-ops"
+Issues = "https://github.com/konradcinkusz/portfolio-ops/issues"
+Changelog = "https://github.com/konradcinkusz/portfolio-ops/blob/main/CHANGELOG.md"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+portfolio_ops = ["py.typed", "schemas/*.schema.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+xfail_strict = true
+filterwarnings = ["error"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "C4", "PT", "S", "PTH", "RET", "ISC"]
+# The message format of spec §7.8 uses "—", "×" and "·" on purpose; they are not typos
+# for "-", "x" and ".".
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert, and they drive git and the CLI through subprocess on purpose.
+"tests/**" = ["S101", "S603", "S607"]
+"scripts/**" = ["S603"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src"]

@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "portfolio-ops kernels.yaml",
+  "description": "Shared code that products reuse (business rules §4.5). A missing file means no kernels. A constraint inside an allOf entry that carries x-rule is enforced by that rule of the engine; everything else is shape, which the engine reports as 'schema'. A key whose value is empty counts as absent.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "kernels": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/kernel"
+      }
+    }
+  },
+  "definitions": {
+    "id": {
+      "description": "Unique across products, kernels, risks and findings; never renamed (rule S1).",
+      "type": "string",
+      "allOf": [
+        {
+          "x-rule": "S1",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+          "not": {
+            "enum": [
+              "portfolio",
+              "all"
+            ]
+          }
+        }
+      ]
+    },
+    "kernel": {
+      "type": "object",
+      "required": [
+        "id",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/id"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "capabilities": {
+          "description": "Configured capabilities (rule S3).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "min_package_consumers": {
+          "description": "Products consuming the kernel as a package before it counts as done.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "default": 2
+        }
+      }
+    }
+  }
+}

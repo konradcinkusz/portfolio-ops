@@ -1,0 +1,224 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "portfolio-ops products.yaml",
+  "description": "The products of a portfolio (business rules §4.5 and §5). A constraint inside an allOf entry that carries x-rule is enforced by that rule of the engine; everything else is shape, which the engine reports as 'schema'. A key whose value is empty counts as absent.",
+  "type": "object",
+  "required": [
+    "products"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "products": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/product"
+      }
+    }
+  },
+  "definitions": {
+    "id": {
+      "description": "Unique across products, kernels, risks and findings; never renamed (rule S1).",
+      "type": "string",
+      "allOf": [
+        {
+          "x-rule": "S1",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+          "not": {
+            "enum": [
+              "portfolio",
+              "all"
+            ]
+          }
+        }
+      ]
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "product": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "status"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/id"
+        },
+        "name": {
+          "$ref": "#/definitions/text"
+        },
+        "status": {
+          "description": "idea, active, paused, dormant or archived (rule S3).",
+          "type": "string",
+          "allOf": [
+            {
+              "x-rule": "S3",
+              "enum": [
+                "idea",
+                "active",
+                "paused",
+                "dormant",
+                "archived"
+              ]
+            }
+          ]
+        },
+        "next_action": {
+          "description": "The one next step. Required when active (rule S4); its history drives the clock (N1).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "capabilities": {
+          "description": "Configured capabilities (rule S3); non-empty when the product is an idea (rule S4).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "feeds_from": {
+          "description": "Kernels this product uses, and how.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "object",
+            "required": [
+              "kernel",
+              "mode"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "kernel": {
+                "description": "A kernel id (rule S2).",
+                "type": "string"
+              },
+              "mode": {
+                "description": "package, copy or planned (rule S3).",
+                "type": "string",
+                "allOf": [
+                  {
+                    "x-rule": "S3",
+                    "enum": [
+                      "package",
+                      "copy",
+                      "planned"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "status_reason": {
+          "description": "Why the product is paused or dormant (rule S4).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "review_by": {
+          "description": "When to look again: at most 60 days ahead when paused, 180 when dormant (rule S4).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "format": "date"
+        }
+      },
+      "allOf": [
+        {
+          "x-rule": "S4",
+          "allOf": [
+            {
+              "if": {
+                "required": [
+                  "status"
+                ],
+                "properties": {
+                  "status": {
+                    "const": "idea"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "capabilities"
+                ],
+                "properties": {
+                  "capabilities": {
+                    "type": "array",
+                    "minItems": 1
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "required": [
+                  "status"
+                ],
+                "properties": {
+                  "status": {
+                    "const": "active"
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "next_action"
+                ],
+                "properties": {
+                  "next_action": {
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "required": [
+                  "status"
+                ],
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "paused",
+                      "dormant"
+                    ]
+                  }
+                }
+              },
+              "then": {
+                "required": [
+                  "status_reason",
+                  "review_by"
+                ],
+                "properties": {
+                  "status_reason": {
+                    "type": "string"
+                  },
+                  "review_by": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,30 @@
+products:
+  - id: alpha
+    name: Alpha
+    status: active
+    next_action: Write the first draft of the sync protocol
+    capabilities: [sync]
+    feeds_from:
+      - kernel: core
+        mode: package
+
+  - id: beta
+    name: Beta
+    status: paused
+    status_reason: Waiting until alpha ships
+    review_by: 2026-10-01
+
+  - id: gamma
+    name: Gamma
+    status: dormant
+    status_reason: Released and stable
+    review_by: 2026-12-01
+
+  - id: delta
+    name: Delta
+    status: idea
+    capabilities: [maps]
+
+  - id: omega
+    name: Omega
+    status: archived
