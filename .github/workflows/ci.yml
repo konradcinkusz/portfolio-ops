@@ -86,7 +86,12 @@ jobs:
       - name: Install portfolio-ops with its development tools
         run: python -m pip install --disable-pip-version-check -e ".[dev]"
       - name: Audit every installed package, runtime and development
-        run: pip-audit --strict --skip-editable --progress-spinner off
+        run: |
+          # portfolio-ops itself is not on PyPI, and --strict refuses to skip it, so audit
+          # exactly what is installed around it — every version pinned by the freeze.
+          pip freeze --exclude-editable --disable-pip-version-check > "$RUNNER_TEMP/installed.txt"
+          pip-audit --strict --no-deps --disable-pip --progress-spinner off \
+            --requirement "$RUNNER_TEMP/installed.txt"
 
   secret-scan:
     name: Secret scan (full history)
