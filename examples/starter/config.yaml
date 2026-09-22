@@ -1,0 +1,28 @@
+# portfolio-ops configuration for a fictional starter portfolio.
+# Every name, date and number in this directory is invented.
+schema_version: 1
+
+# This example lives in a public repository — the engine's own — so it has to opt in to
+# being public. A real data repository must not inherit this flag: delete the line and
+# keep that repository private, because these files list your weak spots (business
+# rules §8.8).
+allow_public: true
+
+thresholds:
+  stale_days: 30         # an active product whose next action stands still longer is stale
+  actions_per_week: 1    # next actions you expect to finish in a week
+  wip_limit: 4           # at most this many active products (30 / 7 × 1 is about 4.3)
+  review_horizon_days:
+    paused: 60
+    dormant: 180
+  deferral_limit: 2      # this many defers since the next action last changed escalate
+
+vocabularies:
+  contexts: [website, app-store, grant-application, conference-talk]
+  capabilities: [tide-tables, offline-sync, plant-journal, reminders, maps, sharing]
+  finding_types: [name_check, metric]
+  decision_types: [external, rejection, rename, adoption]
+
+finding_ttl_days:
+  name_check: 180
+  metric: 30
