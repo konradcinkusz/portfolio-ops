@@ -12,7 +12,6 @@ from dataclasses import dataclass
 
 from portfolio_ops.model import Diagnostic
 from portfolio_ops.report import SECTIONS, ReportInput, title
-from portfolio_ops.report import sections as _sections  # noqa: F401 — registers the sections
 
 LEFT_OUT = (
     "Stale, Escalations, Overdue reviews, Focus and Health are left out until the data validates."

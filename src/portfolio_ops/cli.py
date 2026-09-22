@@ -15,7 +15,6 @@ import argparse
 import datetime as dt
 import os
 import posixpath
-import re
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -37,6 +36,7 @@ from portfolio_ops.loading import (
     check_schema_version,
     iter_unique,
     load_portfolio,
+    parse_date,
     read_config,
 )
 from portfolio_ops.model import FILE_ORDER, PRODUCTS_FILE, Diagnostic
@@ -44,8 +44,6 @@ from portfolio_ops.report import ReportInput
 from portfolio_ops.report.publish import publish
 from portfolio_ops.report.render import render, render_invalid
 from portfolio_ops.rules import CATALOGUE, validate
-
-_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
 
 class _Parser(argparse.ArgumentParser):
@@ -62,12 +60,10 @@ class _Parser(argparse.ArgumentParser):
 
 
 def _date(text: str) -> dt.date:
-    try:
-        if _DATE.fullmatch(text):
-            return dt.date.fromisoformat(text)
-    except ValueError:
-        pass
-    raise argparse.ArgumentTypeError(f"expected a real date written YYYY-MM-DD, got {text!r}")
+    value = parse_date(text)
+    if value is None:
+        raise argparse.ArgumentTypeError(f"expected a real date written YYYY-MM-DD, got {text!r}")
+    return value
 
 
 def valid_repository(text: str) -> bool:

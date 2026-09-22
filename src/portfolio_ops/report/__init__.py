@@ -56,3 +56,18 @@ def week_start(today: dt.date) -> dt.date:
 
 def title(today: dt.date) -> str:
     return f"Weekly review — week of {week_start(today).isoformat()}"
+
+
+# The built-in sections register themselves when their module is imported.
+from portfolio_ops.report import sections  # noqa: E402
+
+__all__ = [
+    "SECTIONS",
+    "ReportInput",
+    "Section",
+    "SectionFunction",
+    "section",
+    "sections",
+    "title",
+    "week_start",
+]

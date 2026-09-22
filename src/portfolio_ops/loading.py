@@ -232,31 +232,38 @@ class _Converter:
 
     def scalar(self, node: yaml.Node, line: int) -> Any:
         text = str(node.value)
-        tag = node.tag
-        try:
-            if tag == "tag:yaml.org,2002:str":
-                return text
-            if tag == "tag:yaml.org,2002:null":
-                return None
-            if tag == "tag:yaml.org,2002:bool" and text.lower() in ("true", "false"):
-                return text.lower() == "true"
-            if tag == "tag:yaml.org,2002:int":
-                if text.startswith("0o"):
-                    return int(text[2:], 8)
-                if text.startswith("0x"):
-                    return int(text[2:], 16)
-                return int(text, 10)
-            if tag == "tag:yaml.org,2002:float":
-                return _float(text)
-        except ValueError:
-            pass
-        self.problem(
-            line, f"the YAML tag {tag} on {text!r} is not supported — write the value plainly"
-        )
-        return _ABSENT
+        value = _construct(node.tag, text)
+        if value is _ABSENT:
+            self.problem(
+                line,
+                f"the YAML tag {node.tag} on {text!r} is not supported — write the value plainly",
+            )
+        return value
 
     def problem(self, line: int, message: str) -> None:
         self.doc.problems.append(_error(self.doc.file, line, message))
+
+
+def _construct(tag: str, text: str) -> Any:
+    """The value of a scalar under the core schema, or _ABSENT for a tag it cannot take."""
+    try:
+        if tag == "tag:yaml.org,2002:str":
+            return text
+        if tag == "tag:yaml.org,2002:null":
+            return None
+        if tag == "tag:yaml.org,2002:bool" and text.lower() in ("true", "false"):
+            return text.lower() == "true"
+        if tag == "tag:yaml.org,2002:int":
+            if text.startswith("0o"):
+                return int(text[2:], 8)
+            if text.startswith("0x"):
+                return int(text[2:], 16)
+            return int(text, 10)
+        if tag == "tag:yaml.org,2002:float":
+            return _float(text)
+    except ValueError:
+        return _ABSENT  # an explicit tag the text cannot satisfy, such as !!int ten
+    return _ABSENT
 
 
 def _float(text: str) -> float:
@@ -715,7 +722,8 @@ def build_findings(doc: Document | None) -> Iterator[Finding]:
 
 # --------------------------------------------------------------------------- decisions.md
 
-_ATX = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]+|$)(.*)$")
+# An ATX heading opens with 1-6 '#' followed by a space, a tab or the end of the line.
+_ATX = re.compile(r"^ {0,3}(#{1,6})(?=[ \t]|$)")
 _CLOSING = re.compile(r"(?:^|[ \t]+)#+[ \t]*$")
 _FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 _HEADING = re.compile(r"^(?P<date>[^\s·|]+)\s*[·|]\s*(?P<ids>[^·|]*?)\s*[·|]\s*(?P<type>[^·|\s]+)$")
@@ -741,7 +749,7 @@ def parse_decisions(text: str) -> tuple[Decision, ...]:
             continue
         match = _ATX.match(line)
         if match and len(match.group(1)) == 2:
-            heading = _CLOSING.sub("", match.group(2)).strip()
+            heading = _CLOSING.sub("", line[match.end() :]).strip()
             decisions.append(parse_heading(number, heading))
     return tuple(decisions)
 
