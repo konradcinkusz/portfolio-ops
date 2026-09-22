@@ -1,0 +1,16 @@
+# Every path is owned by the maintainer (REPO-BASELINE.md §1): the machine-readable
+# answer to "who reviews this", committed before there is a second contributor rather
+# than after the first surprise merge.
+
+*                              @konradcinkusz
+
+# What runs in other people's repositories on their private data, and what decides
+# whether it may read that data at all. Called out so a change here is never merged
+# without the owner's review.
+/action.yml                    @konradcinkusz
+/src/portfolio_ops/guard.py    @konradcinkusz
+/src/portfolio_ops/github.py   @konradcinkusz
+/.github/workflows/            @konradcinkusz
+
+# The source of truth: code follows it, never the other way round.
+/docs/business-rules.md        @konradcinkusz

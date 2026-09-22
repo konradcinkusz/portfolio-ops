@@ -1,0 +1,50 @@
+# Dependency update automation (REPO-BASELINE.md §1, D7).
+#
+# Three ecosystems, because there are three places third-party code is pinned:
+#   pip            pyproject.toml — the runtime dependencies and the development tools
+#   github-actions the workflows and action.yml, pinned by full commit SHA
+#   pre-commit     the gitleaks hook in .pre-commit-config.yaml, pinned by commit SHA
+#
+# Each ecosystem's updates arrive as one grouped pull request a week, which CI checks
+# like any other change.
+
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps(python)"
+    groups:
+      python:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps(actions)"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: pre-commit
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps(pre-commit)"
+    groups:
+      pre-commit:
+        patterns: ["*"]

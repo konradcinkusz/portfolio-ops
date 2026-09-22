@@ -1,0 +1,157 @@
+name: CI
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Everything this repository claims, executed (TESTING-STRATEGY.md §9):
+#
+#    lint         ruff (lint and format) and mypy --strict over src/
+#    test         `python scripts/setup.py` — the one-command onboarding of
+#                 CONTRIBUTING.md — on the oldest and the newest supported Python,
+#                 which ends by running every test, unit and integration
+#    audit        pip-audit over every installed package
+#    secret-scan  gitleaks over the full history, the same pinned hook pre-commit runs
+#    self-test    the composite action against examples/starter, the way a data
+#                 repository calls it (AC9)
+#
+#  Third-party actions are pinned by full commit SHA with the version in a comment,
+#  and kept current by Dependabot: people run this code on their private data (D7).
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # Mondays 05:30 UTC: new advisories and new scanner rules arrive without a commit.
+    - cron: "30 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint and type check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Install the development tools
+        run: python -m pip install --disable-pip-version-check -e ".[dev]"
+      - name: ruff check
+        run: ruff check src tests scripts
+      - name: ruff format
+        run: ruff format --check src tests scripts
+      - name: mypy (strict for src/)
+        run: mypy
+
+  test:
+    name: Tests on Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        # The oldest and the newest supported version (D1).
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: One-command setup, ending with the full test suite
+        run: python scripts/setup.py
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Install portfolio-ops with its development tools
+        run: python -m pip install --disable-pip-version-check -e ".[dev]"
+      - name: Audit every installed package, runtime and development
+        run: pip-audit --strict --skip-editable --progress-spinner off
+
+  secret-scan:
+    name: Secret scan (full history)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Load-bearing: a shallow clone would scan only the tip, so a secret added and
+          # removed in an earlier commit would pass — the case this job exists for.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Install pre-commit at the version pinned in pyproject.toml
+        run: python -m pip install --disable-pip-version-check -e ".[dev]"
+      - name: gitleaks over every commit
+        run: pre-commit run gitleaks-history --hook-stage manual --all-files
+      - name: Explain a failure
+        if: failure()
+        run: |
+          {
+            echo "## Secret scan failed"
+            echo
+            echo "A credential-shaped string is in this repository's history. The repository"
+            echo "is public, so the order is fixed: **rotate the credential first**, then remove"
+            echo "it from the code, then clean history (REPO-BASELINE.md §2)."
+            echo
+            echo "Reproduce locally: \`pre-commit run gitleaks-history --hook-stage manual\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  self-test:
+    name: Action self-test on examples/starter
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read # the dry run reads the open weekly-review issues
+    steps:
+      # The default shallow checkout, on purpose: report must fetch the history itself.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: validate
+        uses: ./
+        with:
+          command: validate
+          path: examples/starter
+      - name: report with publish and dry-run
+        uses: ./
+        with:
+          command: report
+          path: examples/starter
+          publish: "true"
+          dry-run: "true"
+      - name: validate a fixture that breaks S4
+        id: broken
+        continue-on-error: true
+        uses: ./
+        with:
+          command: validate
+          path: tests/fixtures/S4
+      - name: The action fails the step when validation fails
+        if: steps.broken.outcome != 'failure'
+        run: |
+          echo "::error::validate on tests/fixtures/S4 should have failed the step"
+          exit 1

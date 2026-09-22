@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: The rules, in full
+    url: https://github.com/konradcinkusz/portfolio-ops/blob/main/docs/business-rules.md
+    about: What every rule means, the exit codes and the message format.
+  - name: Troubleshooting
+    url: https://github.com/konradcinkusz/portfolio-ops/blob/main/CONTRIBUTING.md#troubleshooting
+    about: The messages people meet most often, and the fix for each.
