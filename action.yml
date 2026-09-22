@@ -1,0 +1,104 @@
+# portfolio-ops as a composite action (business rules §3, §7.6, §8.7).
+#
+# The action installs the engine from its own checkout, so the version a caller pins is
+# the version that runs — there is no second version reference to keep in sync (ADR 0002).
+# Every input reaches the shell through `env`, never through `${{ }}` inside a script, so
+# no input can inject shell code.
+name: portfolio-ops
+description: Validate a private portfolio data repository and keep one weekly-review issue current.
+author: Konrad Cinkusz
+branding:
+  icon: check-square
+  color: gray-dark
+
+inputs:
+  command:
+    description: "validate or report."
+    required: true
+  path:
+    description: The directory holding the data files, relative to the workspace.
+    required: false
+    default: "."
+  publish:
+    description: 'With command: report — "true" keeps one open weekly-review issue current.'
+    required: false
+    default: "false"
+  dry-run:
+    description: 'With publish — "true" prints the planned action and the issue body and sends no write request.'
+    required: false
+    default: "false"
+  github-token:
+    description: Token for the visibility check (rule S7) and for publishing. The workflow's own token is enough.
+    required: false
+    default: ${{ github.token }}
+  python-version:
+    description: The Python that runs the engine.
+    required: false
+    default: "3.13"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python for portfolio-ops
+      id: python
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: ${{ inputs.python-version }}
+        # Leave the caller's PATH alone: the engine runs from its own virtual environment.
+        update-environment: false
+
+    - name: Install portfolio-ops from this action's checkout
+      id: install
+      shell: bash
+      env:
+        PYTHON: ${{ steps.python.outputs.python-path }}
+      run: |
+        set -euo pipefail
+        venv="$RUNNER_TEMP/portfolio-ops"
+        "$PYTHON" -m venv "$venv"
+        if [ -x "$venv/bin/python" ]; then engine="$venv/bin/python"; else engine="$venv/Scripts/python.exe"; fi
+        "$engine" -m pip install --quiet --disable-pip-version-check "$GITHUB_ACTION_PATH"
+        echo "python=$engine" >> "$GITHUB_OUTPUT"
+
+    - name: Fetch the full history the clock needs
+      if: inputs.command == 'report'
+      shell: bash
+      env:
+        DATA_PATH: ${{ inputs.path }}
+      run: |
+        # report reads the clock from git history (rule N1); a shallow checkout would make
+        # the engine stop with exit 2. Unshallow it here; if that fails, the engine's own
+        # message names fetch-depth: 0.
+        if [ "$(git -C "$DATA_PATH" rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
+          git -C "$DATA_PATH" fetch --unshallow --quiet \
+            || echo "::warning title=portfolio-ops::could not fetch the full history; set fetch-depth: 0 on actions/checkout"
+        fi
+
+    - name: Run portfolio-ops
+      shell: bash
+      env:
+        ENGINE: ${{ steps.install.outputs.python }}
+        COMMAND: ${{ inputs.command }}
+        DATA_PATH: ${{ inputs.path }}
+        PUBLISH: ${{ inputs.publish }}
+        DRY_RUN: ${{ inputs.dry-run }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+      run: |
+        set -euo pipefail
+        args=("$COMMAND" --path "$DATA_PATH")
+        case "$COMMAND" in
+          validate)
+            if [ "$PUBLISH" = "true" ] || [ "$DRY_RUN" = "true" ]; then
+              echo "::warning title=portfolio-ops::publish and dry-run apply to the report command only"
+            fi
+            ;;
+          report)
+            if [ "$PUBLISH" = "true" ]; then args+=(--publish); fi
+            if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+            ;;
+          *)
+            echo "::error title=portfolio-ops::the command input must be validate or report"
+            exit 2
+            ;;
+        esac
+        "$ENGINE" -m portfolio_ops "${args[@]}"
