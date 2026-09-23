@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -17,11 +18,19 @@ EXAMPLES = Path(__file__).resolve().parents[2] / "examples" / "starter"
 LINE = re.compile(r"^(error|warning) (\S+) (\S+):(\d+): (.+ — .+)$")
 
 
+def fixture(name: str, tmp_path: Path) -> Path:
+    """A copy outside any git repository: P1 would otherwise compare the fixture with the
+    engine's own previous commit, and the result would depend on the clone."""
+    return copy_fixture(name, tmp_path / name)
+
+
 # ------------------------------------------------------------------ AC1 and AC2
 
 
-def test_the_starter_example_validates_without_errors() -> None:
-    run = run_cli(["validate", "--path", str(EXAMPLES)])
+def test_the_starter_example_validates_without_errors(tmp_path: Path) -> None:
+    starter = Path(shutil.copytree(EXAMPLES, tmp_path / "starter"))
+
+    run = run_cli(["validate", "--path", str(starter)])
 
     assert run.code == 0
     assert run.out == ""
@@ -41,9 +50,9 @@ def test_the_starter_example_validates_without_errors() -> None:
     ],
 )
 def test_each_rule_fixture_prints_exactly_one_error_line_naming_file_and_line(
-    rule: str, file: str, line: int
+    rule: str, file: str, line: int, tmp_path: Path
 ) -> None:
-    run = run_cli(["validate", "--path", str(FIXTURES / rule)])
+    run = run_cli(["validate", "--path", str(fixture(rule, tmp_path))])
 
     assert run.code == 1
     (only,) = run.lines
@@ -54,8 +63,8 @@ def test_each_rule_fixture_prints_exactly_one_error_line_naming_file_and_line(
     assert int(match.group(4)) == line
 
 
-def test_the_l2_fixture_prints_one_warning_and_exits_0() -> None:
-    run = run_cli(["validate", "--path", str(FIXTURES / "L2")])
+def test_the_l2_fixture_prints_one_warning_and_exits_0(tmp_path: Path) -> None:
+    run = run_cli(["validate", "--path", str(fixture("L2", tmp_path))])
 
     assert run.code == 0
     (only,) = run.lines
@@ -66,12 +75,12 @@ def test_the_l2_fixture_prints_one_warning_and_exits_0() -> None:
     )
 
 
-def test_the_valid_fixture_is_the_passing_case() -> None:
-    assert run_cli(["validate", "--path", str(FIXTURES / "valid")]).code == 0
+def test_the_valid_fixture_is_the_passing_case(tmp_path: Path) -> None:
+    assert run_cli(["validate", "--path", str(fixture("valid", tmp_path))]).code == 0
 
 
-def test_diagnostics_go_to_stdout_and_the_summary_to_stderr() -> None:
-    run = run_cli(["validate", "--path", str(FIXTURES / "S4")])
+def test_diagnostics_go_to_stdout_and_the_summary_to_stderr(tmp_path: Path) -> None:
+    run = run_cli(["validate", "--path", str(fixture("S4", tmp_path))])
 
     assert run.out.startswith("error S4 ")
     assert run.err.endswith(": 1 error, 0 warnings\n")

@@ -197,6 +197,23 @@ class Decision:
 
 
 @dataclass(frozen=True)
+class Change:
+    """A product's status or a risk's state changing between two versions of its file (P1).
+
+    ``date`` is the committer date, in UTC, of the commit whose version made the change,
+    or today for a change that is only in the working tree (``commit`` None) — the same
+    reading of history as the clock's (§7.2).
+    """
+
+    kind: Literal["product", "risk"]
+    id: str
+    before: str
+    after: str
+    date: dt.date
+    commit: str | None
+
+
+@dataclass(frozen=True)
 class Thresholds:
     stale_days: int = 30
     actions_per_week: float = 1

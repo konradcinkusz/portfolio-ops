@@ -29,7 +29,7 @@ from portfolio_ops.errors import EXIT_OK, EXIT_VIOLATIONS, EnvironmentProblem, S
 from portfolio_ops.git import Git
 from portfolio_ops.github import API_URL, REPOSITORY, GitHubError, Transport, urllib_transport
 from portfolio_ops.guard import check_visibility
-from portfolio_ops.history import clocks, read_history
+from portfolio_ops.history import NoPreviousCommit, clocks, read_history, recent_changes
 from portfolio_ops.loading import (
     SCHEMA,
     DataDir,
@@ -48,6 +48,7 @@ from portfolio_ops.report.overlap import render_idea_gate
 from portfolio_ops.report.publish import publish
 from portfolio_ops.report.render import render, render_invalid
 from portfolio_ops.rules import CATALOGUE, validate
+from portfolio_ops.rules.changes import check_changes
 from portfolio_ops.rules.gates import gate, idea_gate, run_gate, run_idea_gate
 
 
@@ -275,7 +276,12 @@ def _count(number: int, noun: str) -> str:
 
 def _validate(args: argparse.Namespace, context: _Context) -> int:
     data, config = _open(args, context)
-    diagnostics = diagnose(load_portfolio(data, config), context.today())
+    today = context.today()
+    loaded = load_portfolio(data, config)
+    diagnostics = diagnose(loaded, today)
+    if not loaded.fatal:
+        found = _since_previous_commit(data, loaded.portfolio, today, context)
+        diagnostics = sorted([*diagnostics, *found], key=_rank)
     for diagnostic in diagnostics:
         context.out.write(diagnostic.render(data.display) + "\n")
     errors = sum(1 for d in diagnostics if d.severity == "error")
@@ -285,6 +291,29 @@ def _validate(args: argparse.Namespace, context: _Context) -> int:
         f"{_count(warnings, 'warning')}\n"
     )
     return EXIT_VIOLATIONS if errors else EXIT_OK
+
+
+def _since_previous_commit(
+    data: DataDir, portfolio: Portfolio, today: dt.date, context: _Context
+) -> list[Diagnostic]:
+    """P1 in ``validate``: the status and state changes since the previous commit. Outside
+    a git repository there is nothing to compare with, and validate still works (AC6)."""
+    try:
+        changes = recent_changes(
+            Git(data.root),
+            data,
+            today,
+            warn=lambda file, message: context.warn(
+                Diagnostic("warning", "P1", file, None, message)
+            ),
+        )
+    except NoPreviousCommit:
+        context.err.write(
+            "note: P1 was not checked — this shallow clone does not have the previous commit; "
+            "fetch the full history (fetch-depth: 0 on actions/checkout) to check it\n"
+        )
+        return []
+    return list(check_changes(portfolio, changes))
 
 
 def _report(args: argparse.Namespace, context: _Context) -> int:
@@ -303,10 +332,10 @@ def _report(args: argparse.Namespace, context: _Context) -> int:
     else:
         history = read_history(
             Git(data.root),
-            data.read_text(PRODUCTS_FILE),
+            data,
             today,
-            warn=lambda message: context.warn(
-                Diagnostic("warning", "N1", PRODUCTS_FILE, None, message)
+            warn=lambda file, message: context.warn(
+                Diagnostic("warning", "N1" if file == PRODUCTS_FILE else "P1", file, None, message)
             ),
         )
         portfolio = loaded.portfolio

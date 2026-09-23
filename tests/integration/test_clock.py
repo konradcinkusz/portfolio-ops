@@ -46,8 +46,12 @@ def clock(repo: GitRepo, product_id: str, today: dt.date = TODAY) -> int:
     data = DataDir(repo.root)
     loaded = load_portfolio(data, read_config(data))
     assert loaded.problems == ()
-    history = read_history(Git(repo.root), data.read_text("products.yaml"), today, print)
+    history = read_history(Git(repo.root), data, today, _ignore)
     return clocks(loaded.portfolio, history, today)[product_id].days
+
+
+def _ignore(file: str, message: str) -> None:
+    raise AssertionError(f"unexpected warning about {file}: {message}")
 
 
 def days_since(day: str, today: dt.date = TODAY) -> int:
@@ -183,7 +187,9 @@ def test_a_version_that_does_not_parse_is_skipped_with_a_warning(repo: GitRepo) 
     warnings: list[str] = []
 
     data = DataDir(repo.root)
-    history = read_history(Git(repo.root), data.read_text("products.yaml"), TODAY, warnings.append)
+    history = read_history(
+        Git(repo.root), data, TODAY, lambda file, message: warnings.append(f"{file}: {message}")
+    )
 
     assert history.next_action_since["alpha"] == dt.date(2026, 8, 1)
     assert len(warnings) == 1
@@ -208,7 +214,7 @@ def test_the_history_of_a_data_directory_inside_a_larger_repository(git_repo: Gi
     git_repo.commit(dt.date(2026, 9, 1))
     data = DataDir(git_repo.root / "data")
 
-    history = read_history(Git(data.root), data.read_text("products.yaml"), TODAY, print)
+    history = read_history(Git(data.root), data, TODAY, _ignore)
 
     assert history.next_action_since["alpha"] == dt.date(2026, 8, 1)
     assert history.last_data_commit == dt.date(2026, 8, 1)
