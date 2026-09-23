@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from pathlib import Path
 
 import pytest
 
@@ -19,7 +18,7 @@ from portfolio_ops.report import ReportInput
 from portfolio_ops.report.render import render, render_invalid
 
 Build = Callable[..., ReportInput]
-GOLDEN = Path(__file__).parent / "golden"
+Golden = Callable[[str, str], None]
 PRODUCTS = (FIXTURES / "valid" / "products.yaml").read_text()
 SECTION_ORDER = ["Stale", "Escalations", "Overdue reviews", "Focus", "Health"]
 
@@ -34,14 +33,6 @@ BUSY_DECISIONS = (
     "## 2026-09-08 · alpha · focus\nFocus of the week.\n\n"
     "## 2026-09-12 · alpha · defer\nStill waiting.\n"
 )
-
-
-def check_golden(request: pytest.FixtureRequest, name: str, text: str) -> None:
-    path = GOLDEN / name
-    if request.config.getoption("--update-golden"):
-        path.parent.mkdir(exist_ok=True)
-        path.write_text(text, encoding="utf-8", newline="\n")
-    assert text == path.read_text(encoding="utf-8")
 
 
 @pytest.fixture
@@ -64,26 +55,22 @@ def quiet(build: Build) -> ReportInput:
     )
 
 
-def test_a_report_with_items_matches_its_golden_file(
-    request: pytest.FixtureRequest, busy: ReportInput
-) -> None:
+def test_a_report_with_items_matches_its_golden_file(golden: Golden, busy: ReportInput) -> None:
     rendered = render(busy)
 
     assert rendered.has_items
     assert rendered.title == "Weekly review — week of 2026-09-21"
-    check_golden(request, "busy.md", rendered.markdown)
+    golden("busy.md", rendered.markdown)
 
 
-def test_a_report_without_items_matches_its_golden_file(
-    request: pytest.FixtureRequest, quiet: ReportInput
-) -> None:
+def test_a_report_without_items_matches_its_golden_file(golden: Golden, quiet: ReportInput) -> None:
     rendered = render(quiet)
 
     assert not rendered.has_items
-    check_golden(request, "quiet.md", rendered.markdown)
+    golden("quiet.md", rendered.markdown)
 
 
-def test_invalid_data_renders_only_the_validation_errors(request: pytest.FixtureRequest) -> None:
+def test_invalid_data_renders_only_the_validation_errors(golden: Golden) -> None:
     errors = [
         Diagnostic(
             "error",
@@ -100,7 +87,7 @@ def test_invalid_data_renders_only_the_validation_errors(request: pytest.Fixture
 
     assert rendered.has_items
     assert re.findall(r"^## (.+)$", rendered.markdown, re.MULTILINE) == ["Validation errors"]
-    check_golden(request, "invalid.md", rendered.markdown)
+    golden("invalid.md", rendered.markdown)
 
 
 @pytest.mark.parametrize("scenario", ["busy", "quiet"])

@@ -25,10 +25,15 @@ def escape(text: str) -> str:
     return _SPECIAL.sub(r"\\\1", " ".join(text.split()))
 
 
+def entity_label(name: str | None, entity_id: str) -> str:
+    """``Name (`id`)``, or just the id when there is no other name."""
+    if not name or name == entity_id:
+        return f"`{entity_id}`"
+    return f"{escape(name)} (`{entity_id}`)"
+
+
 def product_label(product: Product | None, product_id: str) -> str:
-    if product is None or not product.name or product.name == product_id:
-        return f"`{product_id}`"
-    return f"{escape(product.name)} (`{product_id}`)"
+    return entity_label(product.name if product else None, product_id)
 
 
 def _days(count: int) -> str:

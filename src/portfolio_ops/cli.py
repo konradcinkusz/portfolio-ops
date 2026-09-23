@@ -1,12 +1,15 @@
-"""The command line: ``validate`` and ``report`` (spec §7.6), exit codes of §7.7.
+"""The command line: ``validate`` and ``report`` (spec §7.6), the gates ``gate`` and
+``idea-gate`` (§6 B1–B6), and the exit codes of §7.7.
 
 Every command runs in the order of §7.3: read config.yaml, check ``schema_version``
-(S6), run the visibility guard (S7), then everything else.
+(S6), run the visibility guard (S7), then everything else. Every command but
+``validate`` then validates the data and judges nothing that does not validate.
 
 Output: diagnostics — one line per finding, §7.8 — go to standard output for
-``validate``; the report's Markdown goes to standard output for ``report``. Warnings
-that are not the command's product, environment errors and summaries go to standard
-error, so the standard output of either command can be piped as it is.
+``validate`` and ``gate``; Markdown goes to standard output for ``report`` and
+``idea-gate``. Warnings that are not the command's product, environment errors and
+summaries go to standard error, so the standard output of every command can be piped as
+it is.
 """
 
 from __future__ import annotations
@@ -39,11 +42,13 @@ from portfolio_ops.loading import (
     parse_date,
     read_config,
 )
-from portfolio_ops.model import FILE_ORDER, PRODUCTS_FILE, Diagnostic
+from portfolio_ops.model import ALL, FILE_ORDER, PRODUCTS_FILE, Diagnostic, Portfolio, Product
 from portfolio_ops.report import ReportInput
+from portfolio_ops.report.overlap import render_idea_gate
 from portfolio_ops.report.publish import publish
 from portfolio_ops.report.render import render, render_invalid
 from portfolio_ops.rules import CATALOGUE, validate
+from portfolio_ops.rules.gates import gate, idea_gate, run_gate, run_idea_gate
 
 
 class _Parser(argparse.ArgumentParser):
@@ -84,7 +89,9 @@ def build_parser(out: IO[str], err: IO[str]) -> argparse.ArgumentParser:
         err=err,
     )
     parser.add_argument("--version", action="version", version=f"portfolio-ops {__version__}")
-    commands = parser.add_subparsers(dest="command", required=True, metavar="{validate,report}")
+    commands = parser.add_subparsers(
+        dest="command", required=True, metavar="{validate,report,gate,idea-gate}"
+    )
     path_help = "the data directory (default: the root of the git repository, else '.')"
     check = commands.add_parser(
         "validate",
@@ -122,6 +129,42 @@ def build_parser(out: IO[str], err: IO[str]) -> argparse.ArgumentParser:
         type=_repository,
         help="the repository to publish to (default: GITHUB_REPOSITORY)",
     )
+    move = commands.add_parser(
+        "gate",
+        help="check an external move of a product in one context",
+        description=(
+            "Check the registered risks and claims that bear on moving a product in one "
+            "context; exit 1 when the gate fails."
+        ),
+        out=out,
+        err=err,
+    )
+    move.add_argument("product", metavar="PRODUCT", help="the id of the product")
+    move.add_argument(
+        "--context",
+        metavar="CONTEXT",
+        required=True,
+        help="where the move happens: one of vocabularies.contexts in config.yaml",
+    )
+    move.add_argument("--path", metavar="DIR", help=path_help)
+    move.add_argument(
+        "--today",
+        metavar="YYYY-MM-DD",
+        type=_date,
+        help="the date of the move (default: today, UTC)",
+    )
+    idea = commands.add_parser(
+        "idea-gate",
+        help="compare an idea with the products and kernels that exist",
+        description=(
+            "List the products and kernels that share capabilities with an idea; exit 1 when "
+            "one product already shares half of them and no admit decision names the idea."
+        ),
+        out=out,
+        err=err,
+    )
+    idea.add_argument("idea", metavar="IDEA", help="the id of a product whose status is idea")
+    idea.add_argument("--path", metavar="DIR", help=path_help)
     return parser
 
 
@@ -169,10 +212,14 @@ def main(
         transport=transport or urllib_transport,
         today=today or _utc_today,
     )
+    commands: dict[str, Callable[[argparse.Namespace, _Context], int]] = {
+        "validate": _validate,
+        "report": _report,
+        "gate": _gate,
+        "idea-gate": _idea_gate,
+    }
     try:
-        if args.command == "validate":
-            return _validate(args, context)
-        return _report(args, context)
+        return commands[args.command](args, context)
     except Stop as stop:
         err.write(stop.render(context.prefix) + "\n")
         return stop.exit_code
@@ -305,3 +352,97 @@ def _publishing_target(args: argparse.Namespace, context: _Context) -> tuple[str
             f"{repository}, or add --dry-run to preview without writing"
         )
     return repository, token
+
+
+# --------------------------------------------------------------------------- the gates
+
+
+def _validated(
+    args: argparse.Namespace, context: _Context, today: dt.date
+) -> tuple[DataDir, Portfolio] | None:
+    """The data, validated first: a command that judges the data judges only valid data.
+    On errors, print them like ``validate`` does and return None — the command exits 1."""
+    data, config = _open(args, context)
+    loaded = load_portfolio(data, config)
+    diagnostics = diagnose(loaded, today)
+    errors = [d for d in diagnostics if d.severity == "error"]
+    for warning in (d for d in diagnostics if d.severity == "warning"):
+        context.warn(warning)
+    if not errors:
+        return data, loaded.portfolio
+    for error in errors:
+        context.out.write(error.render(data.display) + "\n")
+    context.err.write(
+        f"portfolio-ops {args.command}: the data in {data.describe()} does not validate — "
+        f"{_count(len(errors), 'error')}; fix them first, then run {args.command} again\n"
+    )
+    return None
+
+
+def _product(portfolio: Portfolio, ident: str, command: str) -> Product:
+    product = portfolio.product(ident)
+    if product is not None:
+        return product
+    if portfolio.kernel(ident) is not None:
+        raise EnvironmentProblem(
+            f"'{ident}' is a kernel, and {command} checks a product — name a product instead"
+        )
+    raise EnvironmentProblem(f"there is no product '{ident}' in {PRODUCTS_FILE} — use its id")
+
+
+def _context(portfolio: Portfolio, name: str) -> str:
+    declared = portfolio.config.declared("contexts")
+    if name in declared:
+        return name
+    known = ", ".join(declared) if declared else "none is declared yet"
+    if name == ALL:
+        raise EnvironmentProblem(f"all is not a context — gate one context at a time: {known}")
+    raise EnvironmentProblem(
+        f"'{name}' is not a context — use one of vocabularies.contexts in config.yaml: {known}"
+    )
+
+
+def _gate(args: argparse.Namespace, context: _Context) -> int:
+    today: dt.date = args.today or context.today()
+    checked = _validated(args, context, today)
+    if checked is None:
+        return EXIT_VIOLATIONS
+    data, portfolio = checked
+    product = _product(portfolio, args.product, "gate")
+    the_gate = gate(portfolio, product, _context(portfolio, args.context), today)
+    diagnostics = run_gate(the_gate)
+    for diagnostic in diagnostics:
+        context.out.write(diagnostic.render(data.display) + "\n")
+    errors = sum(1 for d in diagnostics if d.severity == "error")
+    warnings = len(diagnostics) - errors
+    context.err.write(
+        f"portfolio-ops gate {product.id} --context {the_gate.context}: "
+        f"{'failed' if errors else 'passed'} — {_count(errors, 'error')}, "
+        f"{_count(warnings, 'warning')}; {_count(len(the_gate.risks), 'risk')} and "
+        f"{_count(len(the_gate.claims), 'claim')} bear on the move\n"
+    )
+    return EXIT_VIOLATIONS if errors else EXIT_OK
+
+
+def _idea_gate(args: argparse.Namespace, context: _Context) -> int:
+    today = context.today()
+    checked = _validated(args, context, today)
+    if checked is None:
+        return EXIT_VIOLATIONS
+    data, portfolio = checked
+    idea = _product(portfolio, args.idea, "idea-gate")
+    if idea.status != "idea":
+        raise EnvironmentProblem(
+            f"idea-gate checks an idea, and '{idea.id}' is {idea.status} — the idea gate is "
+            "the step from idea to active"
+        )
+    the_gate = idea_gate(portfolio, idea, today)
+    failures = run_idea_gate(the_gate)
+    context.out.write(render_idea_gate(the_gate, failures, data.display))
+    shared = (
+        f"{_count(len(the_gate.products), 'product')} and "
+        f"{_count(len(the_gate.kernels), 'kernel')} share its capabilities"
+    )
+    verdict = "failed" if failures else "passed"
+    context.err.write(f"portfolio-ops idea-gate {idea.id}: {verdict} — {shared}\n")
+    return EXIT_VIOLATIONS if failures else EXIT_OK
