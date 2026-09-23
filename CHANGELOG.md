@@ -9,7 +9,7 @@ Notable changes to portfolio-ops. The format follows
 To release, replace "Unreleased" with the date, then push the tag; the release workflow
 refuses an undated entry.
 
-## [0.1.0] — Unreleased
+## [0.1.0] — 2026-09-23
 
 Phase 1 of the [business rules](docs/business-rules.md), revision r1 (§9.1).
 
