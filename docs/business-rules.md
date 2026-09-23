@@ -1,6 +1,6 @@
 # portfolio-ops — business rules
 
-> **Status:** specification, revision **r1**, 2026-09-22.
+> **Status:** specification, revision **r2**, 2026-09-23.
 > The source of truth for the engine's behaviour. Master prompts in `docs/delivery/` are
 > generated from this document. When code, a prompt and this document disagree, this
 > document wins and the disagreement is a finding. During implementation only the
@@ -48,6 +48,9 @@ portfolio-ops is a single-owner tool that runs in the owner's own repository. It
 - Users pin the action to a release tag or, preferably, a full commit SHA.
 - The repository name is part of the contract: GitHub Actions does not redirect renamed
   action repositories, so a rename breaks every caller.
+- The template's copy of the caller workflow skips every job in the template repository
+  itself: the template is public and holds only examples, and S7 would refuse it. In a
+  repository created from the template that condition always holds.
 
 The caller workflow a data repository carries (the template ships this shape):
 
@@ -71,7 +74,7 @@ jobs:
       - uses: actions/checkout@<full-commit-sha>   # vX.Y.Z
         with:
           fetch-depth: 0
-      - uses: konradcinkusz/portfolio-ops@v0.1.0
+      - uses: konradcinkusz/portfolio-ops@<full-commit-sha>   # vX.Y.Z
         with:
           command: validate
 
@@ -85,10 +88,29 @@ jobs:
       - uses: actions/checkout@<full-commit-sha>   # vX.Y.Z
         with:
           fetch-depth: 0
-      - uses: konradcinkusz/portfolio-ops@v0.1.0
+      - uses: konradcinkusz/portfolio-ops@<full-commit-sha>   # vX.Y.Z
         with:
           command: report
           publish: "true"
+
+  dashboard:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@<full-commit-sha>   # vX.Y.Z
+        with:
+          fetch-depth: 0
+      - id: portfolio
+        uses: konradcinkusz/portfolio-ops@<full-commit-sha>   # vX.Y.Z
+        with:
+          command: dashboard
+      - uses: actions/upload-artifact@<full-commit-sha>   # vX.Y.Z
+        with:
+          name: portfolio-dashboard
+          path: ${{ steps.portfolio.outputs.dashboard }}
+          retention-days: 7
 ```
 
 ## 4. Data model
@@ -216,6 +238,8 @@ Paused beta to make room for alpha within the WIP limit.
 - Every level-2 heading must parse; other heading levels are free text.
 - A decision may not be dated in the future.
 - `focus` and `defer` headings name exactly one product.
+- The text under a heading, up to the next level-2 heading, is the decision's justification;
+  the views show it (V1, V2). Text before the first level-2 heading belongs to no decision.
 
 ## 5. Product lifecycle
 
@@ -249,22 +273,22 @@ Prefixes: S structure, L limit, N pressure, P memory, R report, B gates, K kerne
 | N2 | The clock exceeds `stale_days` | `report` | item under Stale | 1 | implemented (v0.1.0) | `portfolio_ops.report.sections.stale` |
 | N3 | The number of `defer` decisions dated after the latest `next_action` change reaches `deferral_limit` | `report` | item under Escalations — split the action, pause or archive | 1 | implemented (v0.1.0) | `portfolio_ops.report.sections.escalations` |
 | N4 | A `paused` or `dormant` product's `review_by` is before today | `report` | item under Overdue reviews | 1 | implemented (v0.1.0) | `portfolio_ops.report.sections.overdue_reviews` |
-| P2 | Every finding has `checked_on`, and `expires_on` or a TTL configured for its type (then `expires_on` = `checked_on` + TTL); a `claim` has a non-empty `used_in` | `validate` | error | 1 | implemented (v0.1.0) | `portfolio_ops.rules.structure.check_findings` |
+| P2 | Every finding has `checked_on`, and `expires_on` or a TTL configured for its type (then `expires_on` = `checked_on` + TTL); a finding holds through its `expires_on`; a `claim` has a non-empty `used_in` | `validate` | error | 1 | implemented (v0.1.0) | `portfolio_ops.rules.structure.check_findings` |
 | R1 | Publishing keeps exactly one open issue labelled `weekly-review` (§7.5) | `report --publish` | — | 1 | implemented (v0.1.0) | `portfolio_ops.report.publish.plan` |
 | R2 | The report has fixed sections in a fixed order (§7.4); phase 2 adds Expired acceptances, Expired claims, Copy-paste debt and Changes without a decision | `report` | — | 1, 2 | implemented (v0.2.0) | `portfolio_ops.report.render.render` |
 | R3 | The focus of the week is the latest `focus` decision; the report evaluates last week's focus and flags a week without one (§7.4) | `report` | item when no focus is recorded | 1 | implemented (v0.1.0) | `portfolio_ops.report.sections.focus` |
-| B1 | `gate <product> --context <ctx>` collects the risks of the product, of every kernel reachable through `feeds_from` (a kernel's risk is inherited by all its consumers) and of scope `portfolio`, keeping those whose `applies_to` contains `ctx` or `all` | `gate` | — | 2 | implemented (v0.2.0) | `portfolio_ops.rules.gates.collect_risks` |
+| B1 | `gate <product> --context <ctx>` collects the risks of the product, of every kernel reachable through `feeds_from` in any mode, `planned` included (a kernel's risk is inherited by all its consumers), and of scope `portfolio`, keeping those whose `applies_to` contains `ctx` or `all` (§7.10) | `gate` | — | 2 | implemented (v0.2.0) | `portfolio_ops.rules.gates.collect_risks` |
 | B2 | A collected risk is `open` with severity `high` or `critical` | `gate` | fail, exit 1 | 2 | implemented (v0.2.0) | `portfolio_ops.rules.gates.check_open_risks` |
 | B3 | A collected risk is `accepted` and `accepted_until` is today or later; after that date it counts as `open` | `gate` | warning | 2 | implemented (v0.2.0) | `portfolio_ops.rules.gates.check_accepted_risks` |
 | B4 | A `claim` about the product has `ctx` in `used_in` and has expired | `gate` | fail, exit 1 — re-verify before use | 2 | implemented (v0.2.0) | `portfolio_ops.rules.gates.check_expired_claims` |
-| B5 | `idea-gate <product>` lists the non-archived products and the kernels that share capabilities with the idea | `idea-gate` | reuse and overlap report | 2 | implemented (v0.2.0) | `portfolio_ops.rules.gates.overlaps` |
-| B6 | At least half of the idea's capabilities are shared with a single product | `idea-gate` | fail, exit 1, until an `admit` decision names the idea (its text carries the justification); a merge is recorded by archiving the idea | 2 | implemented (v0.2.0) | `portfolio_ops.rules.gates.check_idea_overlap` |
-| K1 | A kernel's state is derived, never written: `planned` (no `package` consumer), `extracted` (one), `done` (at least `min_package_consumers`) | `report` | — | 2 | implemented (v0.2.0) | `portfolio_ops.rules.kernels.kernel_state` |
-| K2 | A product consumes a kernel in `copy` mode | `report` | item under Copy-paste debt | 2 | implemented (v0.2.0) | `portfolio_ops.report.sections.copy_paste_debt` |
-| P1 | A product's status or a risk's state changes without a decision that names the id and is dated on the day of the change; a status transition outside §5 | CI (`validate` against the previous commit), `report` | warning and report item — never blocking | 2 | implemented (v0.2.0) | `portfolio_ops.rules.changes.check_changes` |
-| P3 | Before a new check, look up (`subject`, `type`): reuse a valid finding; re-check and update an expired one | `lookup`, procedure | — | 2 | implemented (v0.2.0) | `portfolio_ops.rules.memory.lookup` |
-| V1 | Dashboard: static HTML generated from the data; for a private data repository never published to GitHub Pages — a workflow artifact or a local file | `dashboard` | — | 3 | implemented (v0.3.0) | `portfolio_ops.views.dashboard.render_dashboard` |
-| V2 | Context export: size-bounded Markdown for LLM sessions — active and paused products with their next actions, open risks of severity `medium` or higher, the latest decisions, the capability vocabulary | `export` | — | 3 | implemented (v0.3.0) | `portfolio_ops.views.export.render_export` |
+| B5 | `idea-gate <product>` lists the non-archived products, other ideas included, and the kernels that share capabilities with the idea (§7.10) | `idea-gate` | reuse and overlap report | 2 | implemented (v0.2.0) | `portfolio_ops.rules.gates.overlaps` |
+| B6 | At least half of the idea's capabilities are shared with a single non-archived product | `idea-gate` | fail, exit 1, until an `admit` decision names the idea (its text carries the justification); a merge is recorded by archiving the idea | 2 | implemented (v0.2.0) | `portfolio_ops.rules.gates.check_idea_overlap` |
+| K1 | A kernel's state is derived, never written: `planned` (no `package` consumer), `extracted` (at least one, but fewer than `min_package_consumers`), `done` (at least `min_package_consumers`); an archived product consumes nothing | `report` | — | 2 | implemented (v0.2.0) | `portfolio_ops.rules.kernels.kernel_state` |
+| K2 | A product that is not archived consumes a kernel in `copy` mode | `report` | item under Copy-paste debt | 2 | implemented (v0.2.0) | `portfolio_ops.report.sections.copy_paste_debt` |
+| P1 | A product's status or a risk's state changes without a decision that names the id and is dated on the day of the change; a status transition outside §5 (§7.9) | CI (`validate` against the previous commit), `report` | warning and report item — never blocking | 2 | implemented (v0.2.0) | `portfolio_ops.rules.changes.check_changes` |
+| P3 | Before a new check, look up (`subject`, `type`): reuse a valid finding; re-check and update an expired one (§7.10) | `lookup`, procedure | — | 2 | implemented (v0.2.0) | `portfolio_ops.rules.memory.lookup` |
+| V1 | Dashboard: static HTML generated from the data; for a private data repository never published to GitHub Pages — a workflow artifact or a local file (§7.11) | `dashboard` | — | 3 | implemented (v0.3.0) | `portfolio_ops.views.dashboard.render_dashboard` |
+| V2 | Context export: size-bounded Markdown for LLM sessions — active and paused products with their next actions, open risks of severity `medium` or higher, the latest decisions, the capability vocabulary (§7.11) | `export` | — | 3 | implemented (v0.3.0) | `portfolio_ops.views.export.render_export` |
 
 ## 7. Operational definitions
 
@@ -275,7 +299,8 @@ value of `--today`. Git commit times are the committer timestamps, converted to 
 
 ### 7.2 The clock (N1)
 
-- Only `report` needs git history; `validate` works on any directory.
+- Only `report` needs git history. `validate` reads it when it is there, for P1 (§7.9), and
+  so does `dashboard`, for the clocks (§7.11); both work on any directory.
 - The engine reads the commits that touched `<path>/products.yaml`, newest first, and parses
   each version. A version that fails to parse is skipped with a warning.
 - Values are compared per product id after parsing, so reordering products, reformatting,
@@ -313,16 +338,26 @@ The report is Markdown on standard output, with these sections in this order:
 2. **Stale** — N2: product, clock in days, `next_action`.
 3. **Escalations** — N3.
 4. **Overdue reviews** — N4: product, status, `review_by`.
-5. **Focus** — this week's focus: the latest `focus` decision dated within the seven days
+5. **Expired acceptances** — B3: accepted risks whose `accepted_until` has passed; they
+   count as open again.
+6. **Expired claims** — `claim` findings past their expiry (P2); each is verified again
+   before its next use (B4).
+7. **Copy-paste debt** — K2: each product that carries a copy of a kernel, with the
+   kernel's state (K1).
+8. **Changes without a decision** — P1: the status and state changes dated from the same
+   weekday last week up to today that no decision records, and the transitions §5 does not
+   have (§7.9).
+9. **Focus** — this week's focus: the latest `focus` decision dated within the seven days
    ending today, or the item "No focus recorded this week". Last week's focus: the latest
    `focus` decision dated before that window, evaluated as `done` (the product's
    `next_action` changed after the focus date), `left active` (the product is no longer
    `active`) or `not done`.
-6. **Health** — not items: active products against `wip_limit`; the median clock of active
-   products; the number of stale products; focus completion over the last four evaluated
-   `focus` decisions; the date of the last commit that touched the data directory.
+10. **Health** — not items: active products against `wip_limit`; the median clock of
+    active products; the number of stale products; focus completion over the last four
+    evaluated `focus` decisions; the number of kernels in each state (K1); the date of the
+    last commit that touched the data directory.
 
-The report **has items** when any of sections 1–4 is non-empty or no focus is recorded this
+The report **has items** when any of sections 1–8 is non-empty or no focus is recorded this
 week.
 
 ### 7.5 Publishing (R1)
@@ -345,11 +380,17 @@ These are the public contract and freeze at v1.0.0 (§9.4).
 
 - `portfolio-ops validate [--path DIR]`
 - `portfolio-ops report [--path DIR] [--today YYYY-MM-DD] [--publish] [--dry-run] [--repo OWNER/NAME]`
+- `portfolio-ops gate PRODUCT --context CONTEXT [--path DIR] [--today YYYY-MM-DD]`
+- `portfolio-ops idea-gate IDEA [--path DIR]`
+- `portfolio-ops lookup SUBJECT TYPE [--path DIR] [--today YYYY-MM-DD]`
+- `portfolio-ops dashboard [--path DIR] [--today YYYY-MM-DD] [--output FILE]`
+- `portfolio-ops export [--path DIR] [--today YYYY-MM-DD] [--max-chars N]`
 - `portfolio-ops --version`
-- Composite action (`action.yml`) inputs: `command` (`validate` or `report`, required),
-  `path` (default `.`), `publish` (default `false`), `dry-run` (default `false`),
-  `github-token` (default: the workflow's token), `python-version` (default: the newest
-  supported version).
+- Composite action (`action.yml`) inputs: `command` (`validate`, `report` or `dashboard`,
+  required), `path` (default `.`), `publish` (default `false`), `dry-run` (default
+  `false`), `github-token` (default: the workflow's token), `python-version` (default: the
+  newest supported version). Output: `dashboard`, with `command: dashboard` — the path of
+  the page, outside the workspace.
 
 ### 7.7 Exit codes
 
@@ -357,7 +398,7 @@ These are the public contract and freeze at v1.0.0 (§9.4).
 |---|---|
 | 0 | success; warnings allowed |
 | 1 | rule violations, or a failed gate |
-| 2 | usage or environment error — unsupported `schema_version`, shallow history, missing token, visibility undeterminable in CI |
+| 2 | usage or environment error — unsupported `schema_version`, shallow history, missing token, visibility undeterminable in CI, an argument the data does not have (§7.10), a limit the export cannot meet (§7.11) |
 | 3 | refused by the visibility guard |
 
 ### 7.8 Messages
@@ -371,6 +412,66 @@ warning L2 config.yaml:6: wip_limit 6 exceeds 30 / 7 × 1 = 4.3 — the weekly r
 
 The line number is that of the offending value, or of the entity when a field is missing.
 The troubleshooting table in `CONTRIBUTING.md` is keyed on these messages.
+
+### 7.9 Change coverage (P1)
+
+- Changes are read from git as the clock is (§7.2): the versions of `products.yaml` and
+  `risks.yaml` are compared per id after parsing, and a change is dated by the committer
+  date of the commit whose version makes it, or today when it is only in the working tree.
+- A value outside its vocabulary is not a status (S3 reports it), and a new id is not a
+  change. An id missing from a version keeps its last value.
+- A change is covered by any decision that names the id and is dated on the day of the
+  change. A product that leaves `archived` also needs an `admit` decision (§5).
+- `validate` checks the working tree and the commits since the previous commit — one
+  commit, or everything a merge brings in. Outside a git repository there is nothing to
+  compare; on a shallow clone without the previous commit it says that P1 was not checked
+  and names `fetch-depth: 0`. P1 never changes the exit code.
+- `report` lists the changes dated from the same weekday last week up to today (§7.4).
+
+### 7.10 Gates and lookup
+
+- `gate`, `idea-gate` and `lookup` run in the order of §7.3 and then validate the data. Data
+  that does not validate is not judged: they print its errors and exit 1.
+- An argument the data does not have — an unknown product, context, subject or finding
+  type, a kernel where a product is needed, `all` as a context, `idea-gate` on a product
+  that is not an idea — exits 2.
+- `gate` prints §7.8 lines: `error B2` and `error B4` fail the move and exit 1; `warning B3`
+  does not.
+- `idea-gate` prints a Markdown report: the products and kernels that share the idea's
+  capabilities, each kernel with its state (K1), and the verdict; it exits 1 while B6 fails.
+- `lookup` prints one line per finding about the subject of that type — reuse one that
+  holds, check an expired one again — or says there is none; it exits 0.
+- A finding holds through its `expires_on`, and an acceptance through its `accepted_until`.
+- They run where the move is made, in a clone of the data repository; the composite action
+  does not run them.
+
+### 7.11 Views (V1, V2)
+
+- Views show state and decide nothing: no rule id, no diagnostic, no effect on the exit
+  code. Like the gates, they work only on data that validates; its errors go to standard
+  error, and the command exits 1.
+- **The dashboard** is one self-contained HTML page: an inline stylesheet and no script,
+  font, image or outside link; a Content-Security-Policy that allows only that
+  stylesheet; every value from the data escaped; `noindex`; and a visible note that the
+  page is private. Its panels, in order: a summary; the active products with their next
+  actions and clocks; the ideas; the paused and dormant products, the soonest review
+  first; the archived products; the kernels with their state and consumers; the risks,
+  those that count as open first; the findings, the soonest to expire first; which
+  products and kernels share each capability; and the ten latest decisions with their
+  text.
+- It goes to standard output, or to `--output FILE`. Without git history — outside a
+  repository, or on a shallow clone — it leaves out the clocks and says why. In the
+  composite action it is written outside the workspace, and the output `dashboard` holds
+  its path for a workflow artifact.
+- **The export** is Markdown in the order of V2. The products, the risks and the vocabulary
+  are always there in full; the decisions, newest first with their text, fill what is
+  left of `--max-chars` (12000 characters by default), each whole or left out, and the
+  export says how many it left out. A limit too small for the rest exits 2 and names the
+  smallest limit that fits.
+- An open risk is one that counts as open (B3): `open`, or accepted past its
+  `accepted_until`. A paused product is exported with its `status_reason` and `review_by`,
+  and with its `next_action` when it has one.
+- The export needs no git history.
 
 ## 8. Design notes and rejected alternatives
 
@@ -513,7 +614,7 @@ overview showed, and the hand-maintained overview has been deleted.
 - v1.0.0 comes no earlier than the phase-1 exit criterion being met on real data, and after
   phase 2, because the gates' exit codes belong to the contract.
 - v1.0.0 freezes the repository name, the CLI commands and options, the exit codes, the
-  report's sections, the action's inputs and the supported `schema_version`. From then on a
+  report's sections, the action's inputs and output, and the supported `schema_version`. From then on a
   breaking change needs a new major version, and a floating major tag (`v1`) tracks the
   latest release.
 
@@ -543,3 +644,4 @@ overview showed, and the hand-maintained overview has been deleted.
 | Revision | Date | Change |
 |---|---|---|
 | r1 | 2026-09-22 | Initial specification |
+| r2 | 2026-09-23 | Folds in what phases 1–3 decided where r1 was silent, with no change of behaviour: the complete command-line interface and the action's output (§7.6), the report's ten sections (§7.4), change coverage (§7.9), the gates and lookup as commands (§7.10), the views (§7.11), the dashboard job of the caller workflow (§3), decision text (§4.6), and the rule texts of B1, B5, B6, K1, K2 and P2 |

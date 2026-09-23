@@ -43,7 +43,7 @@ the rules and prints nothing when it is valid. `report` prints this week's revie
 Markdown. `dashboard` writes the whole portfolio as one page to open in a browser.
 
 To install a release without cloning:
-`pipx install git+https://github.com/konradcinkusz/portfolio-ops@v0.1.0`.
+`pipx install git+https://github.com/konradcinkusz/portfolio-ops@v0.3.0`.
 
 ## Using it for your own portfolio
 
@@ -80,7 +80,7 @@ jobs:
       - uses: actions/checkout@<full-commit-sha>   # vX.Y.Z
         with:
           fetch-depth: 0
-      - uses: konradcinkusz/portfolio-ops@v0.1.0
+      - uses: konradcinkusz/portfolio-ops@<full-commit-sha>   # vX.Y.Z
         with:
           command: validate
 
@@ -94,25 +94,11 @@ jobs:
       - uses: actions/checkout@<full-commit-sha>   # vX.Y.Z
         with:
           fetch-depth: 0
-      - uses: konradcinkusz/portfolio-ops@v0.1.0
+      - uses: konradcinkusz/portfolio-ops@<full-commit-sha>   # vX.Y.Z
         with:
           command: report
           publish: "true"
-```
 
-Pin the action to a release tag or, better, to that tag's full commit SHA. The repository
-name is part of the contract: GitHub does not redirect renamed action repositories.
-
-The action runs `validate`, `report` and `dashboard`. The gates, `lookup` and `export` are
-for the moment you are about to act or to ask — run them in a clone of your data
-repository.
-
-### The dashboard as a workflow artifact
-
-To see the whole portfolio as a page, add a job that renders the dashboard and keeps it as
-a workflow artifact. Only people who can read the repository can download it:
-
-```yaml
   dashboard:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -123,7 +109,7 @@ a workflow artifact. Only people who can read the repository can download it:
         with:
           fetch-depth: 0
       - id: portfolio
-        uses: konradcinkusz/portfolio-ops@<full-commit-sha>   # v0.3.0
+        uses: konradcinkusz/portfolio-ops@<full-commit-sha>   # vX.Y.Z
         with:
           command: dashboard
       - uses: actions/upload-artifact@<full-commit-sha>   # vX.Y.Z
@@ -132,6 +118,20 @@ a workflow artifact. Only people who can read the repository can download it:
           path: ${{ steps.portfolio.outputs.dashboard }}
           retention-days: 7
 ```
+
+Pin the action to a release's full commit SHA, with its tag in a comment, or at least to
+the tag. The repository name is part of the contract: GitHub does not redirect renamed
+action repositories.
+
+The action runs `validate`, `report` and `dashboard`. The gates, `lookup` and `export` are
+for the moment you are about to act or to ask — run them in a clone of your data
+repository.
+
+### The dashboard as a workflow artifact
+
+The `dashboard` job renders the whole portfolio as one page and keeps it as the workflow
+artifact `portfolio-dashboard` for seven days. Only people who can read the repository can
+download it.
 
 **Never publish the dashboard with GitHub Pages.** It lists your risks, rejections and
 stalled projects, and a Pages site can be public even when its repository is private. The
@@ -172,7 +172,7 @@ The JSON Schemas let an editor check a file as you type. With the YAML extension
 VS Code, for example, put this on the first line of `products.yaml`:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/konradcinkusz/portfolio-ops/v0.1.0/src/portfolio_ops/schemas/products.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/konradcinkusz/portfolio-ops/v0.3.0/src/portfolio_ops/schemas/products.schema.json
 ```
 
 ## Commands
