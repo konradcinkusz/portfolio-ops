@@ -148,6 +148,19 @@ class Risk:
     def label(self) -> str:
         return f"risk '{self.id}'" if self.id else f"the risk on line {self.loc.line}"
 
+    def acceptance_holds(self, today: dt.date) -> bool:
+        """Accepted, and ``accepted_until`` is today or later (B3)."""
+        return (
+            self.state == "accepted"
+            and self.accepted_until is not None
+            and self.accepted_until >= today
+        )
+
+    def counts_as_open(self, today: dt.date) -> bool:
+        """Open, or accepted past ``accepted_until`` — "after that date it counts as open" (B3)."""
+        expired = self.state == "accepted" and not self.acceptance_holds(today)
+        return self.state == "open" or expired
+
 
 @dataclass(frozen=True)
 class Finding:
@@ -227,6 +240,16 @@ class Config:
     def decision_types(self) -> tuple[str, ...]:
         return _merge(BUILTIN_DECISION_TYPES, self.declared("decision_types"))
 
+    def expiry(self, finding: Finding) -> dt.date | None:
+        """The last day a finding holds (P2): its ``expires_on``, or else ``checked_on`` plus
+        the TTL configured for its type. A finding holds while today is no later than this."""
+        if finding.expires_on is not None:
+            return finding.expires_on
+        ttl = self.finding_ttl_days.get(finding.type or "")
+        if finding.checked_on is None or ttl is None:
+            return None
+        return finding.checked_on + dt.timedelta(days=ttl)
+
 
 def _merge(builtin: tuple[str, ...], configured: tuple[str, ...]) -> tuple[str, ...]:
     return builtin + tuple(value for value in configured if value not in builtin)
@@ -256,3 +279,6 @@ class Portfolio:
 
     def parsed_decisions(self) -> tuple[Decision, ...]:
         return tuple(d for d in self.decisions if d.error is None)
+
+    def kernel(self, kernel_id: str) -> Kernel | None:
+        return next((k for k in self.kernels if k.id == kernel_id), None)
