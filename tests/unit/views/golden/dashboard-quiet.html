@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'sha256-fBxg69uG1vCdoDzfZI7+u7k+cwirz41OwYAnKxjGYb8='; base-uri 'none'; form-action 'none'">
+<title>Portfolio dashboard — 2026-09-20</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #1d2127;
+  --muted: #5b6470;
+  --line: #d8dde3;
+  --panel: #f5f7f9;
+  --link: #0b62c4;
+  --attention: #9a5b00;
+  --attention-bg: #fff4d6;
+  --danger: #b4232c;
+  --danger-bg: #ffe9e8;
+  --success: #1c7a3c;
+  --success-bg: #ddf6e4;
+  --info: #0b62c4;
+  --info-bg: #e2f0ff;
+  --neutral: #4d5561;
+  --neutral-bg: #eceff2;
+  --focus: #7a3fc8;
+  --focus-bg: #f3eaff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111418;
+    --fg: #e4e8ec;
+    --muted: #9aa3ad;
+    --line: #333a42;
+    --panel: #181c21;
+    --link: #6cb0ff;
+    --attention: #f0b44c;
+    --attention-bg: #3a2b0c;
+    --danger: #ff8a85;
+    --danger-bg: #43191a;
+    --success: #6fd38f;
+    --success-bg: #173222;
+    --info: #6cb0ff;
+    --info-bg: #14283f;
+    --neutral: #c3cad2;
+    --neutral-bg: #262c33;
+    --focus: #c49bff;
+    --focus-bg: #2c2140;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+}
+
+header,
+main,
+footer {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+header {
+  padding-top: 1.5rem;
+}
+
+h1 {
+  font-size: 1.6rem;
+  margin: 0 0 0.25rem;
+}
+
+h2 {
+  font-size: 1.15rem;
+  margin: 2.25rem 0 0.75rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--line);
+}
+
+h2 .count {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+h3 {
+  font-size: 0.95rem;
+  margin: 0 0 0.25rem;
+}
+
+p {
+  margin: 0.5rem 0;
+}
+
+a {
+  color: var(--link);
+}
+
+time {
+  white-space: nowrap;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  padding: 0 0.25em;
+  border-radius: 0.25rem;
+  background: var(--neutral-bg);
+}
+
+.lede {
+  color: var(--muted);
+}
+
+.private {
+  border: 1px solid var(--attention);
+  background: var(--attention-bg);
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.8rem;
+}
+
+nav ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.1rem;
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.tile {
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--panel);
+  padding: 0.7rem 0.9rem;
+}
+
+.tile.attention {
+  border-left: 0.3rem solid var(--attention);
+}
+
+.tile dt {
+  color: var(--muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tile dd {
+  margin: 0;
+}
+
+.tile .value {
+  font-size: 1.45rem;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.tile .note {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.table {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+th,
+td {
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+tbody tr:hover {
+  background: var(--panel);
+}
+
+.sub {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.badge {
+  display: inline-block;
+  margin: 0 0.3rem 0 0;
+  padding: 0 0.5rem;
+  border-radius: 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+  color: var(--neutral);
+  background: var(--neutral-bg);
+}
+
+.badge.attention {
+  color: var(--attention);
+  background: var(--attention-bg);
+}
+
+.badge.danger {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.badge.success {
+  color: var(--success);
+  background: var(--success-bg);
+}
+
+.badge.info {
+  color: var(--info);
+  background: var(--info-bg);
+}
+
+.badge.focus {
+  color: var(--focus);
+  background: var(--focus-bg);
+}
+
+.empty,
+.note {
+  color: var(--muted);
+}
+
+.decision {
+  border-top: 1px solid var(--line);
+  padding: 0.7rem 0;
+}
+
+.decision .text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+footer {
+  margin-top: 2.5rem;
+  padding-bottom: 2rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+@media print {
+  nav {
+    display: none;
+  }
+
+  body {
+    font-size: 10pt;
+  }
+
+  .tile,
+  tr,
+  .decision {
+    break-inside: avoid;
+  }
+}
+</style>
+</head>
+<body>
+<header>
+<h1>Portfolio dashboard</h1>
+<p class="lede">Generated by portfolio-ops for 2026-09-20 (UTC). It shows the state of the data files and decides nothing: the rules run in validate, the weekly report and the gates.</p>
+<p class="private" role="note"><strong>Private.</strong> This page lists the portfolio's weak spots: its risks, rejections and stalled projects. Keep it a workflow artifact or a local file, and never publish it on GitHub Pages.</p>
+<nav aria-label="Panels"><ul><li><a href="#summary">Summary</a></li><li><a href="#active">Active products</a></li><li><a href="#ideas">Ideas</a></li><li><a href="#waiting">Paused and dormant</a></li><li><a href="#archived">Archived</a></li><li><a href="#kernels">Kernels</a></li><li><a href="#risks">Risks</a></li><li><a href="#findings">Findings</a></li><li><a href="#capabilities">Capabilities</a></li><li><a href="#decisions">Latest decisions</a></li></ul></nav>
+</header>
+<main>
+<section id="summary" aria-labelledby="summary-title">
+<h2 id="summary-title">Summary</h2>
+<dl class="tiles">
+<div class="tile"><dt>Active</dt><dd class="value">1 of 4</dd><dd class="note">active products within wip_limit</dd></div>
+<div class="tile"><dt>Stale</dt><dd class="value">0</dd><dd class="note">clock past stale_days (30)</dd></div>
+<div class="tile"><dt>Focus this week</dt><dd class="value">Alpha</dd><dd class="note">recorded <time datetime="2026-09-15">2026-09-15</time></dd></div>
+<div class="tile"><dt>Ideas</dt><dd class="value">1</dd><dd class="note">not yet through the idea gate</dd></div>
+<div class="tile"><dt>Paused or dormant</dt><dd class="value">2</dd><dd class="note">no review overdue</dd></div>
+<div class="tile"><dt>Open risks</dt><dd class="value">1</dd><dd class="note">none high or critical</dd></div>
+<div class="tile"><dt>Expired findings</dt><dd class="value">0</dd><dd class="note">of 2 findings</dd></div>
+<div class="tile"><dt>Copy-paste debt</dt><dd class="value">0</dd><dd class="note">kernel copies in products</dd></div>
+<div class="tile"><dt>Kernels</dt><dd class="value">1</dd><dd class="note">0 done · 1 extracted · 0 planned</dd></div>
+</dl>
+</section>
+<section id="active" aria-labelledby="active-title">
+<h2 id="active-title">Active products <span class="count">1</span></h2>
+<div class="table"><table>
+<thead><tr><th scope="col">Product</th><th scope="col">Next action</th><th scope="col">Clock</th><th scope="col">Capabilities</th><th scope="col">Kernels</th></tr></thead>
+<tbody>
+<tr><td>Alpha <code>alpha</code> <span class="badge focus">focus</span></td><td>Write the first draft of the sync protocol</td><td>5 days<span class="sub">since <time datetime="2026-09-15">2026-09-15</time></span></td><td>sync</td><td>Core <code>core</code> <span class="badge">package</span></td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="ideas" aria-labelledby="ideas-title">
+<h2 id="ideas-title">Ideas <span class="count">1</span></h2>
+<div class="table"><table>
+<thead><tr><th scope="col">Idea</th><th scope="col">Capabilities</th><th scope="col">Latest decision</th></tr></thead>
+<tbody>
+<tr><td>Delta <code>delta</code></td><td>maps</td><td>—</td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="waiting" aria-labelledby="waiting-title">
+<h2 id="waiting-title">Paused and dormant <span class="count">2</span></h2>
+<div class="table"><table>
+<thead><tr><th scope="col">Product</th><th scope="col">Status</th><th scope="col">Reason</th><th scope="col">Review by</th><th scope="col">Next action</th></tr></thead>
+<tbody>
+<tr><td>Beta <code>beta</code></td><td>paused</td><td>Waiting until alpha ships</td><td><time datetime="2026-10-01">2026-10-01</time><span class="sub">in 11 days</span></td><td>—</td></tr>
+<tr><td>Gamma <code>gamma</code></td><td>dormant</td><td>Released and stable</td><td><time datetime="2026-12-01">2026-12-01</time><span class="sub">in 72 days</span></td><td>—</td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="archived" aria-labelledby="archived-title">
+<h2 id="archived-title">Archived <span class="count">1</span></h2>
+<div class="table"><table>
+<thead><tr><th scope="col">Product</th><th scope="col">Latest decision</th></tr></thead>
+<tbody>
+<tr><td>Omega <code>omega</code></td><td><time datetime="2026-07-01">2026-07-01</time> · status_change</td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="kernels" aria-labelledby="kernels-title">
+<h2 id="kernels-title">Kernels <span class="count">1</span></h2>
+<div class="table"><table>
+<thead><tr><th scope="col">Kernel</th><th scope="col">Capabilities</th><th scope="col">State</th><th scope="col">As a package</th><th scope="col">As a copy</th><th scope="col">Planned</th></tr></thead>
+<tbody>
+<tr><td>Core <code>core</code></td><td>sync</td><td><span class="badge info">extracted</span><span class="sub">1 of 2 package consumers</span></td><td>Alpha <code>alpha</code></td><td>—</td><td>—</td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="risks" aria-labelledby="risks-title">
+<h2 id="risks-title">Risks <span class="count">2</span></h2>
+<div class="table"><table>
+<thead><tr><th scope="col">Risk</th><th scope="col">Scope</th><th scope="col">Severity</th><th scope="col">Applies to</th><th scope="col">State</th></tr></thead>
+<tbody>
+<tr><td>A dependency&#x27;s licence may forbid resale <code>alpha-licence</code></td><td>Alpha <code>alpha</code></td><td><span class="badge attention">medium</span></td><td>store</td><td><span class="badge attention">open</span></td></tr>
+<tr><td>Two offline edits can overwrite each other <code>core-data-loss</code></td><td>Core <code>core</code></td><td><span class="badge danger">high</span></td><td>all</td><td><span class="badge info">accepted</span><span class="sub">until <time datetime="2026-12-31">2026-12-31</time></span></td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="findings" aria-labelledby="findings-title">
+<h2 id="findings-title">Findings <span class="count">2</span></h2>
+<div class="table"><table>
+<thead><tr><th scope="col">Finding</th><th scope="col">Subject</th><th scope="col">Type</th><th scope="col">Checked on</th><th scope="col">Holds until</th><th scope="col">Used in</th></tr></thead>
+<tbody>
+<tr><td>Syncs a change in under a second on a phone<span class="sub"><code>alpha-sync-claim</code></span></td><td>Alpha <code>alpha</code></td><td>claim</td><td><time datetime="2026-09-01">2026-09-01</time></td><td><time datetime="2026-12-01">2026-12-01</time></td><td>website</td></tr>
+<tr><td>No product in the store uses the name<span class="sub"><code>delta-name</code></span></td><td>Delta <code>delta</code></td><td>name_check</td><td><time datetime="2026-09-10">2026-09-10</time></td><td><time datetime="2026-12-09">2026-12-09</time></td><td>—</td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="capabilities" aria-labelledby="capabilities-title">
+<h2 id="capabilities-title">Capabilities <span class="count">3</span></h2>
+<div class="table"><table>
+<thead><tr><th scope="col">Capability</th><th scope="col">Products</th><th scope="col">Kernels</th></tr></thead>
+<tbody>
+<tr><td>sync</td><td>Alpha <code>alpha</code> <span class="note">active</span></td><td>Core <code>core</code></td></tr>
+<tr><td>maps</td><td>Delta <code>delta</code> <span class="note">idea</span></td><td>—</td></tr>
+<tr><td>notes</td><td>—</td><td>—</td></tr>
+</tbody>
+</table></div>
+</section>
+<section id="decisions" aria-labelledby="decisions-title">
+<h2 id="decisions-title">Latest decisions <span class="count">3</span></h2>
+<p class="note">All 3 decisions, newest first.</p>
+<article class="decision">
+<h3><time datetime="2026-09-15">2026-09-15</time> · focus · Alpha <code>alpha</code></h3>
+<p class="text">Focus of the week.</p>
+</article>
+<article class="decision">
+<h3><time datetime="2026-08-03">2026-08-03</time> · status_change · Beta <code>beta</code></h3>
+<p class="text">Paused beta to make room for alpha.</p>
+</article>
+<article class="decision">
+<h3><time datetime="2026-07-01">2026-07-01</time> · status_change · Omega <code>omega</code></h3>
+<p class="text">Archived omega: the experiment answered its question.</p>
+</article>
+</section>
+</main>
+<footer><p>The data was last committed on <time datetime="2026-09-20">2026-09-20</time>.</p></footer>
+</body>
+</html>

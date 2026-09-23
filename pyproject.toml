@@ -9,7 +9,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "portfolio-ops"
-version = "0.2.0"
+version = "0.3.0"
 description = "Validate a single owner's private portfolio data repository and keep one weekly-review issue current."
 readme = "README.md"
 license = "MIT"
@@ -58,7 +58,7 @@ Changelog = "https://github.com/konradcinkusz/portfolio-ops/blob/main/CHANGELOG.
 where = ["src"]
 
 [tool.setuptools.package-data]
-portfolio_ops = ["py.typed", "schemas/*.schema.json"]
+portfolio_ops = ["py.typed", "schemas/*.schema.json", "views/*.css"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

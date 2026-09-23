@@ -5,7 +5,7 @@
 # Every input reaches the shell through `env`, never through `${{ }}` inside a script, so
 # no input can inject shell code.
 name: portfolio-ops
-description: Validate a private portfolio data repository and keep one weekly-review issue current.
+description: Validate a private portfolio data repository, keep one weekly-review issue current and render its dashboard.
 author: Konrad Cinkusz
 branding:
   icon: check-square
@@ -13,7 +13,7 @@ branding:
 
 inputs:
   command:
-    description: "validate or report."
+    description: "validate, report or dashboard."
     required: true
   path:
     description: The directory holding the data files, relative to the workspace.
@@ -35,6 +35,14 @@ inputs:
     description: The Python that runs the engine.
     required: false
     default: "3.13"
+
+outputs:
+  dashboard:
+    description: >-
+      With command: dashboard — the path of the HTML page, for actions/upload-artifact. The
+      page lists the portfolio's weak spots: keep it a workflow artifact, never publish it
+      on GitHub Pages.
+    value: ${{ steps.run.outputs.dashboard }}
 
 runs:
   using: composite
@@ -66,15 +74,17 @@ runs:
         DATA_PATH: ${{ inputs.path }}
       run: |
         # report reads the clock and the week's status changes from git history (rules N1
-        # and P1), and validate compares with the previous commit (P1). On a shallow
-        # checkout report would stop with exit 2 and validate would skip P1, so unshallow
-        # it here; if that fails, the engine's own message names fetch-depth: 0.
+        # and P1), the dashboard shows the clock, and validate compares with the previous
+        # commit (P1). On a shallow checkout report would stop with exit 2, the dashboard
+        # would show no clocks and validate would skip P1, so unshallow it here; if that
+        # fails, the engine's own message names fetch-depth: 0.
         if [ "$(git -C "$DATA_PATH" rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
           git -C "$DATA_PATH" fetch --unshallow --quiet \
             || echo "::warning title=portfolio-ops::could not fetch the full history; set fetch-depth: 0 on actions/checkout"
         fi
 
     - name: Run portfolio-ops
+      id: run
       shell: bash
       env:
         ENGINE: ${{ steps.install.outputs.python }}
@@ -87,18 +97,21 @@ runs:
         set -euo pipefail
         args=("$COMMAND" --path "$DATA_PATH")
         case "$COMMAND" in
-          validate)
-            if [ "$PUBLISH" = "true" ] || [ "$DRY_RUN" = "true" ]; then
-              echo "::warning title=portfolio-ops::publish and dry-run apply to the report command only"
-            fi
-            ;;
+          validate | dashboard) ;;
           report)
             if [ "$PUBLISH" = "true" ]; then args+=(--publish); fi
             if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
             ;;
           *)
-            echo "::error title=portfolio-ops::the command input must be validate or report"
+            echo "::error title=portfolio-ops::the command input must be validate, report or dashboard"
             exit 2
             ;;
         esac
+        if [ "$COMMAND" != report ] && { [ "$PUBLISH" = "true" ] || [ "$DRY_RUN" = "true" ]; }; then
+          echo "::warning title=portfolio-ops::publish and dry-run apply to the report command only"
+        fi
+        # The page goes outside the workspace, so it can never be committed by accident.
+        page="$RUNNER_TEMP/portfolio-dashboard.html"
+        if [ "$COMMAND" = dashboard ]; then args+=(--output "$page"); fi
         "$ENGINE" -m portfolio_ops "${args[@]}"
+        if [ "$COMMAND" = dashboard ]; then echo "dashboard=$page" >> "$GITHUB_OUTPUT"; fi

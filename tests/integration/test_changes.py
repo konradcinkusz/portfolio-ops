@@ -7,7 +7,6 @@ clock's tests.
 from __future__ import annotations
 
 import datetime as dt
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -202,21 +201,12 @@ def test_outside_a_repository_there_is_nothing_to_compare(tmp_path: Path) -> Non
     assert recent_changes(Git(root), DataDir(root), TODAY, _fail) == ()
 
 
-def _shallow_clone(repo: GitRepo, dest: Path) -> Path:
-    subprocess.run(
-        ["git", "clone", "--quiet", "--depth", "1", repo.root.as_uri(), str(dest)],
-        check=True,
-        capture_output=True,
-    )
-    return dest
-
-
 def test_a_shallow_clone_without_the_previous_commit_cannot_tell(
     repo: GitRepo, tmp_path: Path
 ) -> None:
     commit_products(repo, dt.date(2026, 8, 1), product("alpha", "active"))
     commit_products(repo, dt.date(2026, 8, 10), product("alpha", "paused"))
-    clone = _shallow_clone(repo, tmp_path / "shallow")
+    clone = repo.shallow_clone(tmp_path / "shallow")
 
     with pytest.raises(NoPreviousCommit):
         recent_changes(Git(clone), DataDir(clone), TODAY, _fail)
@@ -276,7 +266,7 @@ def test_validate_on_a_shallow_clone_says_p1_was_not_checked(
     valid_repo: GitRepo, tmp_path: Path
 ) -> None:
     _pause_to_dormant(valid_repo)
-    clone = _shallow_clone(valid_repo, tmp_path / "shallow")
+    clone = valid_repo.shallow_clone(tmp_path / "shallow")
 
     run = run_cli(["validate", "--path", str(clone / "portfolio")])
 

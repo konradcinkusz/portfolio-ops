@@ -25,14 +25,20 @@ class KernelState:
     package_consumers: tuple[str, ...]  # the ids of the products that use it as a package
 
     @property
-    def summary(self) -> str:
-        """'done', 'extracted, 1 of 2 package consumers' or 'planned, no package consumer'."""
+    def progress(self) -> str:
+        """'no package consumer', '1 of 2 package consumers' or '3 package consumers'."""
         count = len(self.package_consumers)
         if self.state == "planned":
-            return "planned, no package consumer"
+            return "no package consumer"
         if self.state == "done":
-            return f"done, {count} package consumers" if count != 1 else "done, 1 package consumer"
-        return f"extracted, {count} of {self.kernel.min_package_consumers} package consumers"
+            return "1 package consumer" if count == 1 else f"{count} package consumers"
+        return f"{count} of {self.kernel.min_package_consumers} package consumers"
+
+    @property
+    def summary(self) -> str:
+        """'done, 2 package consumers', 'extracted, 1 of 2 package consumers' or
+        'planned, no package consumer'."""
+        return f"{self.state}, {self.progress}"
 
 
 def consumers(portfolio: Portfolio, kernel_id: str, mode: str) -> tuple[Product, ...]:

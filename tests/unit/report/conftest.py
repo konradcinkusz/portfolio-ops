@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from helpers import TODAY, copy_fixture, write_files
+from helpers import TODAY, copy_fixture, match_golden, write_files
 from portfolio_ops.history import Clock
 from portfolio_ops.loading import DataDir, load_portfolio, read_config
 from portfolio_ops.model import Change
@@ -22,18 +22,10 @@ GOLDEN = Path(__file__).parent / "golden"
 
 @pytest.fixture
 def golden(request: pytest.FixtureRequest) -> Golden:
-    """``golden(name, text)``: the text equals golden/<name>, byte for byte.
-
-    With ``pytest --update-golden`` it rewrites the file instead; review the diff like any
-    other change.
-    """
+    """``golden(name, text)``: the text equals golden/<name>, byte for byte."""
 
     def check(name: str, text: str) -> None:
-        path = GOLDEN / name
-        if request.config.getoption("--update-golden"):
-            path.parent.mkdir(exist_ok=True)
-            path.write_text(text, encoding="utf-8", newline="\n")
-        assert text == path.read_text(encoding="utf-8")
+        match_golden(GOLDEN / name, text, request.config.getoption("--update-golden"))
 
     return check
 

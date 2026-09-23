@@ -35,11 +35,12 @@ source .venv/bin/activate        # on Windows: .venv\Scripts\activate
 pip install .
 portfolio-ops validate --path examples/starter
 portfolio-ops report --path examples/starter
+portfolio-ops dashboard --path examples/starter --output dashboard.html
 ```
 
 `validate` checks the fictional portfolio in [examples/starter](examples/starter) against
 the rules and prints nothing when it is valid. `report` prints this week's review as
-Markdown.
+Markdown. `dashboard` writes the whole portfolio as one page to open in a browser.
 
 To install a release without cloning:
 `pipx install git+https://github.com/konradcinkusz/portfolio-ops@v0.1.0`.
@@ -102,19 +103,55 @@ jobs:
 Pin the action to a release tag or, better, to that tag's full commit SHA. The repository
 name is part of the contract: GitHub does not redirect renamed action repositories.
 
-The action runs `validate` and `report`. The gates and `lookup` are for the moment you are
-about to act — run them in a clone of your data repository.
+The action runs `validate`, `report` and `dashboard`. The gates, `lookup` and `export` are
+for the moment you are about to act or to ask — run them in a clone of your data
+repository.
+
+### The dashboard as a workflow artifact
+
+To see the whole portfolio as a page, add a job that renders the dashboard and keeps it as
+a workflow artifact. Only people who can read the repository can download it:
+
+```yaml
+  dashboard:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@<full-commit-sha>   # vX.Y.Z
+        with:
+          fetch-depth: 0
+      - id: portfolio
+        uses: konradcinkusz/portfolio-ops@<full-commit-sha>   # v0.3.0
+        with:
+          command: dashboard
+      - uses: actions/upload-artifact@<full-commit-sha>   # vX.Y.Z
+        with:
+          name: portfolio-dashboard
+          path: ${{ steps.portfolio.outputs.dashboard }}
+          retention-days: 7
+```
+
+**Never publish the dashboard with GitHub Pages.** It lists your risks, rejections and
+stalled projects, and a Pages site can be public even when its repository is private. The
+page says so itself, asks search engines not to index it, and loads nothing from anywhere:
+no script, font or image. It works offline, from the artifact or from a local file.
 
 ### Action inputs
 
 | Input | Default | What it does |
 |---|---|---|
-| `command` | — (required) | `validate` or `report` |
+| `command` | — (required) | `validate`, `report` or `dashboard` |
 | `path` | `.` | The directory holding the data files, relative to the workspace |
 | `publish` | `false` | With `report`: keep one open `weekly-review` issue current |
 | `dry-run` | `false` | With `publish`: print the planned action and the issue body, send no write request |
 | `github-token` | the workflow's token | Used for the visibility check and for publishing |
 | `python-version` | `3.13` | The Python that runs the engine |
+
+| Output | What it holds |
+|---|---|
+| `dashboard` | With `command: dashboard`: the path of the page, outside the workspace, for `actions/upload-artifact` |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -146,6 +183,8 @@ portfolio-ops report [--path DIR] [--today YYYY-MM-DD] [--publish] [--dry-run] [
 portfolio-ops gate PRODUCT --context CONTEXT [--path DIR] [--today YYYY-MM-DD]
 portfolio-ops idea-gate IDEA [--path DIR]
 portfolio-ops lookup SUBJECT TYPE [--path DIR] [--today YYYY-MM-DD]
+portfolio-ops dashboard [--path DIR] [--today YYYY-MM-DD] [--output FILE]
+portfolio-ops export [--path DIR] [--today YYYY-MM-DD] [--max-chars N]
 portfolio-ops --version
 ```
 
@@ -170,6 +209,25 @@ portfolio-ops --version
   `admit` decision names the idea and says why it stands apart.
 - **`lookup`** answers "was this already verified?" before a new check: reuse a finding
   that holds, check an expired one again and update it, or record a new one.
+- **`dashboard`** writes the whole portfolio as one static HTML page:
+  - a summary
+  - every product by status, with next actions, clocks and reviews
+  - the kernels and their state
+  - the risks and findings
+  - which products and kernels share each capability
+  - the latest decisions with their text
+
+  It shows state and decides nothing. Without git history it leaves out the clocks and
+  says why. It writes to standard output unless `--output` names a file.
+- **`export`** prints what an LLM session needs to know about the portfolio, as Markdown of
+  at most `--max-chars` characters (12000 by default):
+  - the active and paused products with their next actions
+  - the open risks of severity medium or higher
+  - the latest decisions
+  - the capability vocabulary
+
+  The decisions, newest first, fill whatever room the rest leaves. Paste it at the start
+  of a conversation: `portfolio-ops export | pbcopy` on macOS, `| clip` on Windows.
 - **`report --publish`** keeps one open issue labelled `weekly-review` current: it creates,
   updates or closes it. It needs `GITHUB_TOKEN`, and the repository from `--repo` or
   `GITHUB_REPOSITORY`. **`--dry-run`** prints the planned action instead and sends no write

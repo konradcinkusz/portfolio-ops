@@ -12,7 +12,7 @@ import re
 import statistics
 from collections.abc import Iterator
 
-from portfolio_ops.model import PORTFOLIO, Decision, Product
+from portfolio_ops.model import PORTFOLIO, Decision, Portfolio, Product
 from portfolio_ops.report import ReportInput, Section, section
 from portfolio_ops.rules.changes import check_changes
 from portfolio_ops.rules.kernels import copies, kernel_state
@@ -249,16 +249,23 @@ def changes_without_decision(data: ReportInput) -> Section:
     return Section("Changes without a decision", tuple(lines), True)
 
 
-def _focus_decisions(data: ReportInput) -> list[Decision]:
+def _focus_decisions(portfolio: Portfolio) -> list[Decision]:
     """Parsed focus decisions, latest first; the later heading wins on the same day."""
-    focus = [
-        d for d in data.portfolio.parsed_decisions() if d.type == "focus" and d.date is not None
-    ]
+    focus = [d for d in portfolio.parsed_decisions() if d.type == "focus" and d.date is not None]
     return sorted(focus, key=lambda d: (d.date, d.line), reverse=True)
 
 
 def _window_start(today: dt.date) -> dt.date:
     return today - dt.timedelta(days=FOCUS_WINDOW_DAYS - 1)
+
+
+def this_weeks_focus(portfolio: Portfolio, today: dt.date) -> Decision | None:
+    """R3: the latest focus decision dated within the seven days ending today."""
+    start = _window_start(today)
+    return next(
+        (d for d in _focus_decisions(portfolio) if d.date is not None and start <= d.date <= today),
+        None,
+    )
 
 
 def evaluate_focus(data: ReportInput, decision: Decision) -> str:
@@ -275,7 +282,7 @@ def evaluate_focus(data: ReportInput, decision: Decision) -> str:
 
 def _evaluated(data: ReportInput) -> Iterator[tuple[Decision, str]]:
     start = _window_start(data.today)
-    for decision in _focus_decisions(data):
+    for decision in _focus_decisions(data.portfolio):
         if decision.date is not None and decision.date < start:
             yield decision, evaluate_focus(data, decision)
 
@@ -283,11 +290,7 @@ def _evaluated(data: ReportInput) -> Iterator[tuple[Decision, str]]:
 @section(9)
 def focus(data: ReportInput) -> Section:
     """R3: this week's focus, and last week's evaluated."""
-    start = _window_start(data.today)
-    this_week = next(
-        (d for d in _focus_decisions(data) if d.date is not None and start <= d.date <= data.today),
-        None,
-    )
+    this_week = this_weeks_focus(data.portfolio, data.today)
     lines = []
     if this_week is None:
         lines.append(

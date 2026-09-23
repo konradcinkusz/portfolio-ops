@@ -1,6 +1,6 @@
 # ADR 0005 — Changes need a decision: what validate and the report compare (P1)
 
-- **Status:** proposed, 2026-09-23 — accepted when the owner merges phase 2
+- **Status:** accepted, 2026-09-23, with the merge of phase 2
 - **Decided by:** the engine's reading of business rules §6 P1 and §8.4, for the owner to
   confirm
 - **Governs:** `src/portfolio_ops/history.py`, `src/portfolio_ops/rules/changes.py`, the

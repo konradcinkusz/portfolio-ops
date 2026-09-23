@@ -7,7 +7,6 @@ scenario needs, then asks the engine how many days an active product has stood s
 from __future__ import annotations
 
 import datetime as dt
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -230,15 +229,6 @@ def test_the_clock_never_runs_backwards_when_today_precedes_the_commit(repo: Git
 # ------------------------------------------------------------------ AC6
 
 
-def _shallow_clone(repo: GitRepo, dest: Path) -> Path:
-    subprocess.run(
-        ["git", "clone", "--quiet", "--depth", "1", repo.root.as_uri(), str(dest)],
-        check=True,
-        capture_output=True,
-    )
-    return dest
-
-
 @pytest.fixture
 def history_repo(repo: GitRepo) -> GitRepo:
     for day in (1, 10, 20):
@@ -250,7 +240,7 @@ def history_repo(repo: GitRepo) -> GitRepo:
 def test_report_on_a_shallow_clone_exits_2_naming_fetch_depth_0(
     history_repo: GitRepo, tmp_path: Path
 ) -> None:
-    clone = _shallow_clone(history_repo, tmp_path / "shallow")
+    clone = history_repo.shallow_clone(tmp_path / "shallow")
 
     run = run_cli(["report", "--path", str(clone)])
 
@@ -263,7 +253,7 @@ def test_report_on_a_shallow_clone_exits_2_naming_fetch_depth_0(
 def test_validate_needs_no_history_even_on_a_shallow_clone(
     history_repo: GitRepo, tmp_path: Path
 ) -> None:
-    clone = _shallow_clone(history_repo, tmp_path / "shallow")
+    clone = history_repo.shallow_clone(tmp_path / "shallow")
 
     assert run_cli(["validate", "--path", str(clone)]).code == 0
 

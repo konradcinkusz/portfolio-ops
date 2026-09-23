@@ -23,3 +23,4 @@ repos:
         name: Detect hardcoded secrets (full history)
         entry: gitleaks git --redact --verbose
         stages: [manual]
+        always_run: true  # it scans history, not files: run even when nothing is staged
