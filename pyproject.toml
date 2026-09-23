@@ -58,7 +58,7 @@ Changelog = "https://github.com/konradcinkusz/portfolio-ops/blob/main/CHANGELOG.
 where = ["src"]
 
 [tool.setuptools.package-data]
-portfolio_ops = ["py.typed", "schemas/*.schema.json"]
+portfolio_ops = ["py.typed", "schemas/*.schema.json", "views/*.css"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

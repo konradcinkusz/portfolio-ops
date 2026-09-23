@@ -1,15 +1,16 @@
 """The command line: ``validate`` and ``report`` (spec §7.6), the gates ``gate`` and
-``idea-gate`` (§6 B1–B6), ``lookup`` (P3), and the exit codes of §7.7.
+``idea-gate`` (§6 B1–B6), ``lookup`` (P3), the view ``dashboard`` (V1), and the exit
+codes of §7.7.
 
 Every command runs in the order of §7.3: read config.yaml, check ``schema_version``
 (S6), run the visibility guard (S7), then everything else. Every command but
-``validate`` then validates the data and judges nothing that does not validate.
+``validate`` then validates the data and works on nothing that does not validate.
 
 Output: diagnostics — one line per finding, §7.8 — go to standard output for
 ``validate`` and ``gate``; Markdown for ``report`` and ``idea-gate``; one line per
-recorded finding for ``lookup``. Warnings that are not the command's product, environment
-errors and summaries go to standard error, so the standard output of every command can be
-piped as it is.
+recorded finding for ``lookup``; HTML for ``dashboard``, unless it writes a file. Warnings
+that are not the command's product, environment errors and summaries go to standard
+error, so the standard output of every command can be piped as it is.
 """
 
 from __future__ import annotations
@@ -29,7 +30,13 @@ from portfolio_ops.errors import EXIT_OK, EXIT_VIOLATIONS, EnvironmentProblem, S
 from portfolio_ops.git import Git
 from portfolio_ops.github import API_URL, REPOSITORY, GitHubError, Transport, urllib_transport
 from portfolio_ops.guard import check_visibility
-from portfolio_ops.history import NoPreviousCommit, clocks, read_history, recent_changes
+from portfolio_ops.history import (
+    History,
+    NoPreviousCommit,
+    clocks,
+    read_history,
+    recent_changes,
+)
 from portfolio_ops.loading import (
     SCHEMA,
     DataDir,
@@ -60,6 +67,7 @@ from portfolio_ops.rules import CATALOGUE, validate
 from portfolio_ops.rules.changes import check_changes
 from portfolio_ops.rules.gates import gate, idea_gate, run_gate, run_idea_gate
 from portfolio_ops.rules.memory import lookup
+from portfolio_ops.views.dashboard import DashboardInput, render_dashboard
 
 
 class _Parser(argparse.ArgumentParser):
@@ -101,7 +109,9 @@ def build_parser(out: IO[str], err: IO[str]) -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"portfolio-ops {__version__}")
     commands = parser.add_subparsers(
-        dest="command", required=True, metavar="{validate,report,gate,idea-gate,lookup}"
+        dest="command",
+        required=True,
+        metavar="{validate,report,gate,idea-gate,lookup,dashboard}",
     )
     path_help = "the data directory (default: the root of the git repository, else '.')"
     check = commands.add_parser(
@@ -197,6 +207,28 @@ def build_parser(out: IO[str], err: IO[str]) -> argparse.ArgumentParser:
         type=_date,
         help="the date the finding must hold on (default: today, UTC)",
     )
+    view = commands.add_parser(
+        "dashboard",
+        help="write the whole portfolio as one static HTML page",
+        description=(
+            "Write the whole portfolio as one self-contained HTML page. The page is private: "
+            "keep it a workflow artifact or a local file, and never publish it on GitHub Pages."
+        ),
+        out=out,
+        err=err,
+    )
+    view.add_argument("--path", metavar="DIR", help=path_help)
+    view.add_argument(
+        "--today",
+        metavar="YYYY-MM-DD",
+        type=_date,
+        help="the date to show the portfolio on (default: today, UTC)",
+    )
+    view.add_argument(
+        "--output",
+        metavar="FILE",
+        help="write the page to FILE (default: standard output)",
+    )
     return parser
 
 
@@ -250,6 +282,7 @@ def main(
         "gate": _gate,
         "idea-gate": _idea_gate,
         "lookup": _lookup,
+        "dashboard": _dashboard,
     }
     try:
         return commands[args.command](args, context)
@@ -362,14 +395,7 @@ def _report(args: argparse.Namespace, context: _Context) -> int:
     if errors:
         rendered = render_invalid(errors, data.display, today)
     else:
-        history = read_history(
-            Git(data.root),
-            data,
-            today,
-            warn=lambda file, message: context.warn(
-                Diagnostic("warning", "N1" if file == PRODUCTS_FILE else "P1", file, None, message)
-            ),
-        )
+        history = read_history(Git(data.root), data, today, warn=_history_warning(context))
         portfolio = loaded.portfolio
         rendered = render(
             ReportInput(
@@ -398,6 +424,17 @@ def _report(args: argparse.Namespace, context: _Context) -> int:
     return EXIT_VIOLATIONS if errors else EXIT_OK
 
 
+def _history_warning(context: _Context) -> Callable[[str, str], None]:
+    """A version of a data file in history that does not parse: N1 reads products.yaml,
+    P1 reads risks.yaml too."""
+
+    def warn(file: str, message: str) -> None:
+        rule = "N1" if file == PRODUCTS_FILE else "P1"
+        context.warn(Diagnostic("warning", rule, file, None, message))
+
+    return warn
+
+
 def _publishing_target(args: argparse.Namespace, context: _Context) -> tuple[str, str | None]:
     repository = args.repo or context.env.get("GITHUB_REPOSITORY") or ""
     if not repository:
@@ -420,10 +457,15 @@ def _publishing_target(args: argparse.Namespace, context: _Context) -> tuple[str
 
 
 def _validated(
-    args: argparse.Namespace, context: _Context, today: dt.date
+    args: argparse.Namespace,
+    context: _Context,
+    today: dt.date,
+    errors_to: IO[str] | None = None,
 ) -> tuple[DataDir, Portfolio] | None:
-    """The data, validated first: a command that judges the data judges only valid data.
-    On errors, print them like ``validate`` does and return None — the command exits 1."""
+    """The data, validated first: a command that judges the data judges only valid data,
+    and a view shows only valid data. On errors, print them like ``validate`` does — to
+    ``errors_to``, standard output unless the command's output is something else — and
+    return None: the command exits 1."""
     data, config = _open(args, context)
     loaded = load_portfolio(data, config)
     diagnostics = diagnose(loaded, today)
@@ -433,7 +475,7 @@ def _validated(
     if not errors:
         return data, loaded.portfolio
     for error in errors:
-        context.out.write(error.render(data.display) + "\n")
+        (errors_to or context.out).write(error.render(data.display) + "\n")
     context.err.write(
         f"portfolio-ops {args.command}: the data in {data.describe()} does not validate — "
         f"{_count(len(errors), 'error')}; fix them first, then run {args.command} again\n"
@@ -567,3 +609,60 @@ def _lookup(args: argparse.Namespace, context: _Context) -> int:
         verdict = "nothing is recorded yet"
     context.err.write(f"portfolio-ops lookup {subject} {kind}: {verdict}\n")
     return EXIT_OK
+
+
+# --------------------------------------------------------------------------- views
+
+
+def _dashboard(args: argparse.Namespace, context: _Context) -> int:
+    today: dt.date = args.today or context.today()
+    checked = _validated(args, context, today, errors_to=context.err)
+    if checked is None:
+        return EXIT_VIOLATIONS
+    data, portfolio = checked
+    history, missing = _history_if_any(data, today, context)
+    page = render_dashboard(
+        DashboardInput(
+            portfolio=portfolio,
+            today=today,
+            clocks=clocks(portfolio, history, today) if history else None,
+            last_data_commit=history.last_data_commit if history else None,
+            no_clocks=missing,
+        )
+    )
+    where = _write_output(args.output, page, context)
+    context.err.write(
+        f"portfolio-ops dashboard: wrote {where} — {_count(len(portfolio.products), 'product')}, "
+        f"{_count(len(portfolio.kernels), 'kernel')}, {_count(len(portfolio.risks), 'risk')}, "
+        f"{_count(len(portfolio.findings), 'finding')} and "
+        f"{_count(len(portfolio.parsed_decisions()), 'decision')}\n"
+    )
+    return EXIT_OK
+
+
+def _history_if_any(data: DataDir, today: dt.date, context: _Context) -> tuple[History | None, str]:
+    """The history, for a view that can do without it (P8), or why there is none."""
+    git = Git(data.root)
+    if not git.inside_work_tree():
+        missing = "the data directory is not inside a git repository"
+    elif git.is_shallow():
+        missing = (
+            "this is a shallow clone — fetch the full history (fetch-depth: 0 on "
+            "actions/checkout) to show them"
+        )
+    else:
+        return read_history(git, data, today, warn=_history_warning(context)), ""
+    context.err.write(f"note: the dashboard shows no clocks — {missing}\n")
+    return None, missing
+
+
+def _write_output(output: str | None, text: str, context: _Context) -> str:
+    """Write a view to ``--output``, or to standard output without one or with '-'."""
+    if output is None or output == "-":
+        context.out.write(text)
+        return "standard output"
+    try:
+        Path(output).write_text(text, encoding="utf-8", newline="\n")
+    except OSError as exc:
+        raise EnvironmentProblem(f"cannot write {output}: {exc.strerror}") from exc
+    return output

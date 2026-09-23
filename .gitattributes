@@ -20,6 +20,7 @@
 # repository's language statistics.
 tests/fixtures/**           linguist-vendored
 tests/unit/report/golden/** linguist-vendored
+tests/unit/views/golden/**  linguist-vendored
 
 # The example data and the documentation are prose and data, not code.
 examples/** linguist-documentation

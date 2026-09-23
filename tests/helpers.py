@@ -38,6 +38,18 @@ def copy_fixture(name: str, dest: Path) -> Path:
     return dest
 
 
+def match_golden(path: Path, text: str, update: bool) -> None:
+    """``text`` equals the golden file ``path``, byte for byte.
+
+    With ``pytest --update-golden`` it rewrites the file instead; review the diff like any
+    other change.
+    """
+    if update:
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(text, encoding="utf-8", newline="\n")
+    assert text == path.read_text(encoding="utf-8")
+
+
 def load_valid(root: Path, files: Mapping[str, str] | None = None) -> Portfolio:
     """The typed model of the valid fixture, copied to ``root``, with ``files`` replaced.
 
@@ -168,3 +180,12 @@ class GitRepo:
     def commit(self, date: dt.date | str, message: str = "update data") -> None:
         self.git("add", "--all")
         self.git("commit", "--quiet", "--no-verify", "--allow-empty", "-m", message, date=date)
+
+    def shallow_clone(self, dest: Path) -> Path:
+        """A clone with only the latest commit, as actions/checkout makes by default."""
+        subprocess.run(
+            ["git", "clone", "--quiet", "--depth", "1", self.root.as_uri(), str(dest)],
+            check=True,
+            capture_output=True,
+        )
+        return dest

@@ -20,6 +20,7 @@ COMMANDS = [
     ["gate", "alpha", "--context", "website"],
     ["idea-gate", "delta"],
     ["lookup", "delta", "name_check"],
+    ["dashboard"],
 ]
 
 
