@@ -1,0 +1,19 @@
+# Fictional test data. It lives in a public repository, so it opts in to being public;
+# a real data repository stays private instead (business rules §8.8).
+schema_version: 1
+allow_public: true
+
+thresholds:
+  stale_days: 30
+  actions_per_week: 1
+  wip_limit: 4
+
+vocabularies:
+  # S5 fixture: 'all' is reserved and cannot be declared as a context.
+  contexts: [website, store, all]
+  capabilities: [sync, maps, notes]
+  finding_types: [name_check]
+  decision_types: [external]
+
+finding_ttl_days:
+  name_check: 90

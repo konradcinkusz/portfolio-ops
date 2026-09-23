@@ -1,0 +1,17 @@
+# S7 fixture: no allow_public. The tests tell the engine the repository is public,
+# and expect a refusal before any other file is read.
+schema_version: 1
+
+thresholds:
+  stale_days: 30
+  actions_per_week: 1
+  wip_limit: 4
+
+vocabularies:
+  contexts: [website, store]
+  capabilities: [sync, maps, notes]
+  finding_types: [name_check]
+  decision_types: [external]
+
+finding_ttl_days:
+  name_check: 90

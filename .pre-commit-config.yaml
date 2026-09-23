@@ -1,0 +1,25 @@
+# Secret scanning — the local half of a two-part control (P5, REPO-BASELINE.md §2).
+#
+#   gitleaks          runs on every commit and scans the staged changes, so a
+#                     credential is stopped before it becomes history.
+#   gitleaks-history  the same hook at the same pinned version, scanning the full git
+#                     history. CI runs it (.github/workflows/ci.yml, job secret-scan)
+#                     to catch contributors without hooks; run it yourself with
+#                       pre-commit run gitleaks-history --hook-stage manual
+#
+# One pin serves both, so the scanner that guards commits is the scanner CI runs.
+# The pin is a full commit SHA with the tag in a comment, the same rule as for
+# third-party actions: users run this code on their private data.
+#
+# This repository is public: a pushed commit is disclosed the moment it is pushed. If
+# a secret ever lands here, rotate it first and clean history second.
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e  # frozen: v8.30.1
+    hooks:
+      - id: gitleaks
+      - id: gitleaks
+        alias: gitleaks-history
+        name: Detect hardcoded secrets (full history)
+        entry: gitleaks git --redact --verbose
+        stages: [manual]

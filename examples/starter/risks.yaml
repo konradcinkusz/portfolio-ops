@@ -1,0 +1,16 @@
+# Fictional risks. Record what the risk is, never who it concerns.
+risks:
+  - id: tide-data-licence
+    scope: tidewatch
+    title: The tide-station data licence forbids commercial redistribution
+    severity: high
+    applies_to: [app-store, website]
+    state: open
+
+  - id: sync-conflict-loss
+    scope: sync-core
+    title: Two devices editing offline can drop one of the changes
+    severity: medium
+    applies_to: [all]
+    state: accepted
+    accepted_until: 2026-12-31

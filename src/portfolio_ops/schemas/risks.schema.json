@@ -1,0 +1,129 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "portfolio-ops risks.yaml",
+  "description": "Registered risks (business rules §4.5). A missing file means no risks. A constraint inside an allOf entry that carries x-rule is enforced by that rule of the engine; everything else is shape, which the engine reports as 'schema'. A key whose value is empty counts as absent.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "risks": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/definitions/risk"
+      }
+    }
+  },
+  "definitions": {
+    "id": {
+      "description": "Unique across products, kernels, risks and findings; never renamed (rule S1).",
+      "type": "string",
+      "allOf": [
+        {
+          "x-rule": "S1",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+          "not": {
+            "enum": [
+              "portfolio",
+              "all"
+            ]
+          }
+        }
+      ]
+    },
+    "risk": {
+      "type": "object",
+      "required": [
+        "id",
+        "scope",
+        "title",
+        "severity",
+        "applies_to",
+        "state"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/id"
+        },
+        "scope": {
+          "description": "A product id, a kernel id or portfolio (rule S2).",
+          "type": "string"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "severity": {
+          "description": "low < medium < high < critical (rule S3). A mitigated risk gets a lower severity.",
+          "type": "string",
+          "allOf": [
+            {
+              "x-rule": "S3",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "critical"
+              ]
+            }
+          ]
+        },
+        "applies_to": {
+          "description": "Configured contexts the risk applies to, or [all] (rule S3).",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "state": {
+          "description": "open, accepted or closed (rule S3).",
+          "type": "string",
+          "allOf": [
+            {
+              "x-rule": "S3",
+              "enum": [
+                "open",
+                "accepted",
+                "closed"
+              ]
+            }
+          ]
+        },
+        "accepted_until": {
+          "description": "When the acceptance ends; required when state is accepted.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "format": "date"
+        }
+      },
+      "if": {
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "state": {
+            "const": "accepted"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "accepted_until"
+        ],
+        "properties": {
+          "accepted_until": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,41 @@
+# Fictional products: one of each status.
+products:
+  - id: tidewatch
+    name: Tidewatch
+    status: active
+    next_action: Ship the offline tide-table cache to five beta testers
+    capabilities: [tide-tables, offline-sync]
+    feeds_from:
+      - kernel: sync-core
+        mode: package
+
+  - id: fern-journal
+    name: Fern Journal
+    status: active
+    next_action: Draft the three onboarding screens
+    capabilities: [plant-journal, reminders]
+    feeds_from:
+      - kernel: sync-core
+        mode: copy
+
+  - id: lantern-maps
+    name: Lantern Maps
+    status: idea
+    capabilities: [maps, sharing]
+
+  - id: quiet-hours
+    name: Quiet Hours
+    status: paused
+    status_reason: Waiting for the calendar integration to leave preview
+    review_by: 2026-11-16
+    next_action: Prototype the weekly do-not-disturb schedule
+
+  - id: paper-kite
+    name: Paper Kite
+    status: dormant
+    status_reason: Released and stable; no investment planned
+    review_by: 2027-03-01
+
+  - id: old-lantern
+    name: Old Lantern
+    status: archived

@@ -1,0 +1,47 @@
+name: Bug report
+description: portfolio-ops did something it should not, or failed to do what it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not paste your real portfolio data.** This repository is public. Reduce the
+        problem to a few invented lines — `alpha`, `beta` — that still show it.
+  - type: input
+    id: version
+    attributes:
+      label: portfolio-ops version
+      description: The output of `portfolio-ops --version`, or the ref your workflow pins.
+      placeholder: portfolio-ops 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where it ran
+      options:
+        - The command line
+        - The composite action in a workflow
+    validations:
+      required: true
+  - type: textarea
+    id: ran
+    attributes:
+      label: What you ran, and what it printed
+      description: The exact command or action inputs, and the complete output. Redact anything credential-shaped.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: The smallest invented data that shows it
+      description: Only the files and lines that matter, with invented names.
+      render: yaml
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+      description: If a rule of docs/business-rules.md says so, name the rule and section.
+    validations:
+      required: true

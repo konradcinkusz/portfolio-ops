@@ -1,0 +1,14 @@
+findings:
+  - id: alpha-sync-claim
+    subject: alpha
+    type: claim
+    result: Syncs a change in under a second on a phone
+    checked_on: 2026-09-01
+    expires_on: 2026-12-01
+    used_in: [website]
+
+  - id: delta-name
+    subject: delta
+    type: name_check
+    result: No product in the store uses the name
+    checked_on: 2026-09-10

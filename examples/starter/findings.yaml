@@ -1,0 +1,22 @@
+# Fictional findings: what was verified, and until when it holds.
+findings:
+  - id: tidewatch-offline-week
+    subject: tidewatch
+    type: claim
+    result: Tide tables stay available for seven days without a connection
+    evidence: Airplane-mode test on two phones, written up in the test log
+    checked_on: 2026-09-10
+    expires_on: 2026-12-10
+    used_in: [app-store, website]
+
+  - id: fern-journal-name
+    subject: fern-journal
+    type: name_check
+    result: No app-store listing or registered trademark uses the name
+    checked_on: 2026-08-30
+
+  - id: tidewatch-retention
+    subject: tidewatch
+    type: metric
+    result: 41% of beta testers still open the app after four weeks
+    checked_on: 2026-09-15

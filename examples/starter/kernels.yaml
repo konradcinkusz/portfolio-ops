@@ -1,0 +1,7 @@
+# Fictional shared code. Tidewatch uses Sync Core as a package; Fern Journal still carries
+# a copy of it.
+kernels:
+  - id: sync-core
+    name: Sync Core
+    capabilities: [offline-sync]
+    min_package_consumers: 2

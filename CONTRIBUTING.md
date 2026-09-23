@@ -1,0 +1,116 @@
+# Contributing to portfolio-ops
+
+Thank you for helping. Two rules come before everything else:
+
+- **[docs/business-rules.md](docs/business-rules.md) is the source of truth.** If the code
+  and that document disagree, the document wins; a change in behaviour starts as a change
+  to the document.
+- **Never commit real portfolio data.** This repository is public and a pushed commit is
+  public forever. Fixtures and examples use invented names only.
+
+## Setup — one command
+
+You need Python 3.11 or newer and git. Then, from a clone:
+
+```bash
+python scripts/setup.py
+```
+
+It checks the prerequisites, creates `.venv`, installs portfolio-ops with its development
+tools at the versions pinned in `pyproject.toml`, installs the pre-commit hook that scans
+every commit for secrets, and runs the tests. Nothing to configure: `GITHUB_TOKEN` is
+optional and only needed to publish a report (see [secrets.env.example](secrets.env.example)).
+CI runs this same script, so if it works in CI it works for you.
+
+## Everyday commands
+
+With the environment activated (`source .venv/bin/activate`, or `.venv\Scripts\activate`
+on Windows):
+
+| What | Command |
+|---|---|
+| All tests, unit and integration | `python -m pytest` |
+| Lint | `ruff check src tests scripts` |
+| Format | `ruff format src tests scripts` |
+| Types (strict for `src/`) | `mypy` |
+| Secret scan over the whole history | `pre-commit run gitleaks-history --hook-stage manual` |
+| Regenerate the golden reports after an intended change | `python -m pytest --update-golden`, then review the diff |
+| Run the engine | `portfolio-ops validate --path examples/starter` |
+
+CI runs all of these on every pull request — lint, types, the tests on Python 3.11 and
+3.13, the dependency audit, the secret scan and the action's self-test — plus CodeQL.
+
+## Where things live
+
+| Area | Code | Tests |
+|---|---|---|
+| Typed model, JSON Schemas | `src/portfolio_ops/model.py`, `src/portfolio_ops/schemas/` | `tests/unit/test_loading.py` |
+| Reading the data (P11), S6 | `src/portfolio_ops/loading.py` | `tests/unit/test_loading.py`, `tests/unit/test_schema_version.py` |
+| Rules S1–S5, P2, L1, L2 | `src/portfolio_ops/rules/` | `tests/unit/rules/`, `tests/fixtures/<rule-id>/` |
+| Visibility guard (S7) | `src/portfolio_ops/guard.py`, `src/portfolio_ops/github.py` | `tests/unit/test_guard.py` |
+| The clock (N1) | `src/portfolio_ops/history.py`, `src/portfolio_ops/git.py` | `tests/integration/test_clock.py` |
+| The report (N2–N4, R1–R3) | `src/portfolio_ops/report/` | `tests/unit/report/` |
+| Command line | `src/portfolio_ops/cli.py` | `tests/unit/test_cli.py` |
+| Composite action | `action.yml` | the `self-test` job in `.github/workflows/ci.yml` |
+
+## Adding or changing a rule
+
+1. Change [docs/business-rules.md](docs/business-rules.md) first, or open a
+   "Rule question or proposal" issue.
+2. Write the rule as a function in `src/portfolio_ops/rules/` and register it with
+   `@rule("ID", "summary")` — no base class to inherit (P10). Rules are pure: they read the
+   typed model and today's date and return diagnostics; they never read files, git or the
+   network.
+3. Add a fixture under `tests/fixtures/<rule-id>/` that differs from `tests/fixtures/valid/`
+   in exactly one place, and tests for both the violation and the passing case.
+4. Messages follow §7.8: one line, `<severity> <rule> <file>:<line>: <what> — <fix>`, with
+   the line of the offending value, or of the entity when a field is missing.
+5. Update the Status and Entry point columns of §6, the CHANGELOG, and this document's
+   troubleshooting table if people will meet the message.
+
+## Troubleshooting
+
+Find the line you saw by pasting part of it into your browser's search. Each key below is
+text the engine really prints — a test keeps this table honest.
+
+| The message contains | What it means | What to do |
+|---|---|---|
+| `is active but has no next_action` | S4: an active product needs one next step | Add `next_action`, or change the product's status |
+| `is archived but no status_change decision names it` | S4: archiving is a decision, and decisions are logged | Add `## <date> · <id> · status_change` to decisions.md |
+| `days ahead — choose a date no later than` | S4: `review_by` is past the review horizon for its status | Pick an earlier date: at most 60 days ahead when paused, 180 when dormant |
+| `products are active but wip_limit is` | L1: more products are in progress than the limit allows | Move the rest to `paused` or `dormant`, each with a `review_by` |
+| `the weekly report will flag most active products` | L2 (warning): the thresholds make the report noise (spec §8.1) | Lower `wip_limit`, or raise `stale_days` or `actions_per_week` |
+| `which is not a product, kernel, risk or finding id` | S2: a decision names an id that no longer exists — ids never change | Restore the id and change the `name` instead, or correct the heading |
+| `the heading does not follow` | S3: a level-2 heading in decisions.md is not a decision | Write it as `## 2026-09-22 · <id> · <type>`, or use `###` for other headings |
+| `no TTL is configured for type` | P2: a finding needs to know when it expires | Add `expires_on`, or set `finding_ttl_days.<type>` in config.yaml |
+| `is a claim with no used_in` | P2: a claim must say where it is used externally | List the contexts in `used_in` |
+| `unknown key` | `schema`: a key the format does not have — usually a typo | Fix the spelling; the message lists the keys that exist |
+| `is not valid YAML` | `schema`: the file does not parse | Fix the syntax at the line shown |
+| `is not supported by portfolio-ops` | S6: the data format and the engine version differ | Follow [docs/migrations/](docs/migrations/README.md), or pin a matching engine version |
+| `schema_version is missing` | S6: config.yaml does not say which format it uses | Add `schema_version: 1` |
+| `does not set allow_public: true` | S7: the data repository is public | Make the repository private, or set `allow_public: true` if you build in public |
+| `cannot tell whether the data repository is public` | S7: the guard could not ask GitHub | In Actions: pass the workflow's token and check its access. Locally this is a warning only |
+| `this is a shallow clone` | `report` needs the full history for the clock | Set `fetch-depth: 0` on `actions/checkout`, or run `git fetch --unshallow` |
+| `is not inside a git repository` | `report` reads the clock from git | Run it in a clone of the data repository |
+| `--publish needs GITHUB_TOKEN` | Publishing writes an issue and needs a token | Set `GITHUB_TOKEN`, or add `--dry-run` to preview |
+| `--dry-run previews publishing, so it needs --publish` | `--dry-run` only makes sense when publishing | Add `--publish`, or drop `--dry-run` |
+| `git is not on PATH` | `scripts/setup.py` needs git | Install git from <https://git-scm.com/downloads> |
+
+## Releasing
+
+Releases are tag-driven (P12) and only the owner tags.
+
+1. Set the version in `pyproject.toml`.
+2. In CHANGELOG.md, replace "Unreleased" in that version's heading with today's date.
+3. Merge, then tag the merge commit `vX.Y.Z` and push the tag.
+
+The release workflow checks that the tag, `pyproject.toml` and a dated CHANGELOG entry
+agree, runs the tests on the tagged commit, and creates the GitHub Release with the
+CHANGELOG entry as its notes.
+
+## Standards
+
+This repository follows the `architecture-standards` marketplace, declared in
+[.claude/settings.json](.claude/settings.json). [ADR 0001](docs/adr/0001-standards-scope.md)
+says which parts apply to a Python tool, and [CLAUDE.md](CLAUDE.md) repeats the working
+rules for agents.

@@ -1,0 +1,81 @@
+name: Release
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Tag-driven releases (P12). Pushing a v* tag creates the GitHub Release; there is
+#  nothing to deploy. Callers pin the action to the tag or, better, to its commit SHA
+#  (business rules §3).
+#
+#    push tag vX.Y.Z
+#      ├── the tag, pyproject.toml and a dated CHANGELOG.md entry agree
+#      ├── the one-command setup runs the full test suite on the tagged commit
+#      └── gh release create, with the CHANGELOG entry as the release notes
+#
+#  No third-party release action: the gh CLI on the runner does it with the
+#  workflow's own token.
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # to create the release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+
+      - name: The tag, pyproject.toml and CHANGELOG.md agree
+        run: |
+          python - <<'PYTHON'
+          import os
+          import pathlib
+          import re
+          import sys
+          import tomllib
+
+          tag = os.environ["GITHUB_REF_NAME"]
+          version = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]
+          if tag != f"v{version}":
+              sys.exit(f"::error::tag {tag} does not match version {version} in pyproject.toml")
+          changelog = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8")
+          entry = re.search(
+              rf"^## \[{re.escape(version)}\] — (?P<date>.+?)\n(?P<notes>.*?)(?=^## \[|\Z)",
+              changelog,
+              re.MULTILINE | re.DOTALL,
+          )
+          if entry is None:
+              sys.exit(f"::error::CHANGELOG.md has no entry for {version}")
+          if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", entry["date"]):
+              sys.exit(f"::error::CHANGELOG.md entry {version} is '{entry['date']}' — date it before tagging")
+          notes = pathlib.Path(os.environ["RUNNER_TEMP"]) / "notes.md"
+          notes.write_text(entry["notes"].strip() + "\n", encoding="utf-8")
+          PYTHON
+
+      - name: The full test suite passes on the tagged commit
+        run: python scripts/setup.py
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          --repo "$GITHUB_REPOSITORY"
+          --title "portfolio-ops $GITHUB_REF_NAME"
+          --notes-file "$RUNNER_TEMP/notes.md"
+          --verify-tag

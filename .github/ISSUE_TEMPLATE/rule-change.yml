@@ -1,0 +1,28 @@
+name: Rule question or proposal
+description: A rule is unclear, conflicts with another, or should change.
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The rules live in docs/business-rules.md, and that document wins over the code.
+        A change to a rule is a change to that document first.
+  - type: input
+    id: rule
+    attributes:
+      label: Rule id and section
+      placeholder: S4, business rules §5
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is unclear, contradictory or wrong
+      description: Quote the sentence of the specification you mean.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What it should say instead, and why
+      description: The failure the change prevents, or the alternative it rejects.

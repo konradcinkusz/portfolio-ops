@@ -1,0 +1,27 @@
+# Local secrets. secrets.env.example documents every variable; the real values live
+# only in a gitignored .env or in the shell (REPO-BASELINE.md §2).
+.env
+*.env
+
+# Virtual environments — scripts/setup.py creates .venv
+.venv/
+venv/
+
+# Python build and cache output
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

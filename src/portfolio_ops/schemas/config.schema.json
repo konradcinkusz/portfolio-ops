@@ -1,0 +1,193 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "portfolio-ops config.yaml",
+  "description": "Settings and vocabularies of a portfolio-ops data directory (business rules §4.2). A constraint inside an allOf entry that carries x-rule is enforced by that rule of the engine; everything else is shape, which the engine reports as 'schema'. A key whose value is empty counts as absent.",
+  "type": "object",
+  "required": [
+    "schema_version"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "description": "Version of the data format. This engine reads version 1 (rule S6).",
+      "type": "integer",
+      "allOf": [
+        {
+          "x-rule": "S6",
+          "const": 1
+        }
+      ]
+    },
+    "allow_public": {
+      "description": "Only true if this data may live in a public repository (rule S7). The files list risks, rejections and stalled projects; the default refuses a public repository.",
+      "type": [
+        "boolean",
+        "null"
+      ],
+      "default": false
+    },
+    "thresholds": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "stale_days": {
+          "description": "Days without progress on its next action after which an active product is stale (N2, L2).",
+          "type": "integer",
+          "minimum": 1,
+          "default": 30
+        },
+        "actions_per_week": {
+          "description": "Next actions you expect to finish per week (L2).",
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 1
+        },
+        "wip_limit": {
+          "description": "Most products that may be active at once (L1, L2).",
+          "type": "integer",
+          "minimum": 1,
+          "default": 4
+        },
+        "review_horizon_days": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "paused": {
+              "description": "Furthest a paused product's review_by may lie ahead (S4).",
+              "type": "integer",
+              "minimum": 1,
+              "default": 60
+            },
+            "dormant": {
+              "description": "Furthest a dormant product's review_by may lie ahead (S4).",
+              "type": "integer",
+              "minimum": 1,
+              "default": 180
+            }
+          }
+        },
+        "deferral_limit": {
+          "description": "Defer decisions after the latest next_action change that escalate a product (N3).",
+          "type": "integer",
+          "minimum": 1,
+          "default": 2
+        }
+      }
+    },
+    "vocabularies": {
+      "description": "Extensions of the configurable vocabularies. Product statuses, risk severities and states, feeds_from modes and the built-in finding and decision types are fixed by the engine (rule S5).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "contexts": {
+          "description": "Where risks apply and claims are used externally, for example website or app-store. 'all' is reserved (rule S5).",
+          "allOf": [
+            {
+              "$ref": "#/definitions/slugList"
+            },
+            {
+              "x-rule": "S5",
+              "not": {
+                "contains": {
+                  "const": "all"
+                }
+              }
+            }
+          ]
+        },
+        "capabilities": {
+          "description": "What products and kernels can do; the idea gate compares ideas by these.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/slugList"
+            }
+          ]
+        },
+        "finding_types": {
+          "description": "Finding types beyond the built-in claim, for example name_check or metric.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/slugList"
+            },
+            {
+              "x-rule": "S5",
+              "not": {
+                "contains": {
+                  "const": "claim"
+                }
+              }
+            }
+          ]
+        },
+        "decision_types": {
+          "description": "Decision types beyond the built-in admit, status_change, focus, defer and risk_accepted.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/slugList"
+            },
+            {
+              "x-rule": "S5",
+              "not": {
+                "contains": {
+                  "enum": [
+                    "admit",
+                    "status_change",
+                    "focus",
+                    "defer",
+                    "risk_accepted"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "x-rule": "S5",
+          "propertyNames": {
+            "enum": [
+              "contexts",
+              "capabilities",
+              "finding_types",
+              "decision_types"
+            ]
+          }
+        }
+      ]
+    },
+    "finding_ttl_days": {
+      "description": "Days a finding of each type stays valid when it has no expires_on (rule P2). Keys are finding types (rule S3).",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 1
+      }
+    }
+  },
+  "definitions": {
+    "slugList": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$"
+      },
+      "description": "Vocabulary values: lowercase letters, digits, hyphens and underscores, as in the built-in status_change. Ids (rule S1) do not allow underscores."
+    }
+  }
+}
