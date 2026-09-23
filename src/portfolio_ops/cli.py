@@ -1,12 +1,15 @@
-"""The command line: ``validate`` and ``report`` (spec §7.6), exit codes of §7.7.
+"""The command line: ``validate`` and ``report`` (spec §7.6), the gates ``gate`` and
+``idea-gate`` (§6 B1–B6), ``lookup`` (P3), and the exit codes of §7.7.
 
 Every command runs in the order of §7.3: read config.yaml, check ``schema_version``
-(S6), run the visibility guard (S7), then everything else.
+(S6), run the visibility guard (S7), then everything else. Every command but
+``validate`` then validates the data and judges nothing that does not validate.
 
 Output: diagnostics — one line per finding, §7.8 — go to standard output for
-``validate``; the report's Markdown goes to standard output for ``report``. Warnings
-that are not the command's product, environment errors and summaries go to standard
-error, so the standard output of either command can be piped as it is.
+``validate`` and ``gate``; Markdown for ``report`` and ``idea-gate``; one line per
+recorded finding for ``lookup``. Warnings that are not the command's product, environment
+errors and summaries go to standard error, so the standard output of every command can be
+piped as it is.
 """
 
 from __future__ import annotations
@@ -26,7 +29,7 @@ from portfolio_ops.errors import EXIT_OK, EXIT_VIOLATIONS, EnvironmentProblem, S
 from portfolio_ops.git import Git
 from portfolio_ops.github import API_URL, REPOSITORY, GitHubError, Transport, urllib_transport
 from portfolio_ops.guard import check_visibility
-from portfolio_ops.history import clocks, read_history
+from portfolio_ops.history import NoPreviousCommit, clocks, read_history, recent_changes
 from portfolio_ops.loading import (
     SCHEMA,
     DataDir,
@@ -39,11 +42,24 @@ from portfolio_ops.loading import (
     parse_date,
     read_config,
 )
-from portfolio_ops.model import FILE_ORDER, PRODUCTS_FILE, Diagnostic
+from portfolio_ops.model import (
+    ALL,
+    FILE_ORDER,
+    FINDINGS_FILE,
+    PORTFOLIO,
+    PRODUCTS_FILE,
+    Diagnostic,
+    Portfolio,
+    Product,
+)
 from portfolio_ops.report import ReportInput
+from portfolio_ops.report.overlap import render_idea_gate
 from portfolio_ops.report.publish import publish
 from portfolio_ops.report.render import render, render_invalid
 from portfolio_ops.rules import CATALOGUE, validate
+from portfolio_ops.rules.changes import check_changes
+from portfolio_ops.rules.gates import gate, idea_gate, run_gate, run_idea_gate
+from portfolio_ops.rules.memory import lookup
 
 
 class _Parser(argparse.ArgumentParser):
@@ -84,7 +100,9 @@ def build_parser(out: IO[str], err: IO[str]) -> argparse.ArgumentParser:
         err=err,
     )
     parser.add_argument("--version", action="version", version=f"portfolio-ops {__version__}")
-    commands = parser.add_subparsers(dest="command", required=True, metavar="{validate,report}")
+    commands = parser.add_subparsers(
+        dest="command", required=True, metavar="{validate,report,gate,idea-gate,lookup}"
+    )
     path_help = "the data directory (default: the root of the git repository, else '.')"
     check = commands.add_parser(
         "validate",
@@ -121,6 +139,63 @@ def build_parser(out: IO[str], err: IO[str]) -> argparse.ArgumentParser:
         metavar="OWNER/NAME",
         type=_repository,
         help="the repository to publish to (default: GITHUB_REPOSITORY)",
+    )
+    move = commands.add_parser(
+        "gate",
+        help="check an external move of a product in one context",
+        description=(
+            "Check the registered risks and claims that bear on moving a product in one "
+            "context; exit 1 when the gate fails."
+        ),
+        out=out,
+        err=err,
+    )
+    move.add_argument("product", metavar="PRODUCT", help="the id of the product")
+    move.add_argument(
+        "--context",
+        metavar="CONTEXT",
+        required=True,
+        help="where the move happens: one of vocabularies.contexts in config.yaml",
+    )
+    move.add_argument("--path", metavar="DIR", help=path_help)
+    move.add_argument(
+        "--today",
+        metavar="YYYY-MM-DD",
+        type=_date,
+        help="the date of the move (default: today, UTC)",
+    )
+    idea = commands.add_parser(
+        "idea-gate",
+        help="compare an idea with the products and kernels that exist",
+        description=(
+            "List the products and kernels that share capabilities with an idea; exit 1 when "
+            "one product already shares half of them and no admit decision names the idea."
+        ),
+        out=out,
+        err=err,
+    )
+    idea.add_argument("idea", metavar="IDEA", help="the id of a product whose status is idea")
+    idea.add_argument("--path", metavar="DIR", help=path_help)
+    memory = commands.add_parser(
+        "lookup",
+        help="look up what was already verified before checking again",
+        description=(
+            "List the findings about a subject of one type: reuse one that holds, check an "
+            "expired one again and update it, or record a new one."
+        ),
+        out=out,
+        err=err,
+    )
+    memory.add_argument("subject", metavar="SUBJECT", help="a product id, a kernel id or portfolio")
+    memory.add_argument(
+        "type", metavar="TYPE", help="claim, or one of vocabularies.finding_types in config.yaml"
+    )
+    memory.add_argument("--path", metavar="DIR", help=path_help)
+    memory.add_argument(
+        "--today",
+        metavar="YYYY-MM-DD",
+        type=_date,
+        help="the date the finding must hold on (default: today, UTC)",
     )
     return parser
 
@@ -169,10 +244,15 @@ def main(
         transport=transport or urllib_transport,
         today=today or _utc_today,
     )
+    commands: dict[str, Callable[[argparse.Namespace, _Context], int]] = {
+        "validate": _validate,
+        "report": _report,
+        "gate": _gate,
+        "idea-gate": _idea_gate,
+        "lookup": _lookup,
+    }
     try:
-        if args.command == "validate":
-            return _validate(args, context)
-        return _report(args, context)
+        return commands[args.command](args, context)
     except Stop as stop:
         err.write(stop.render(context.prefix) + "\n")
         return stop.exit_code
@@ -228,7 +308,12 @@ def _count(number: int, noun: str) -> str:
 
 def _validate(args: argparse.Namespace, context: _Context) -> int:
     data, config = _open(args, context)
-    diagnostics = diagnose(load_portfolio(data, config), context.today())
+    today = context.today()
+    loaded = load_portfolio(data, config)
+    diagnostics = diagnose(loaded, today)
+    if not loaded.fatal:
+        found = _since_previous_commit(data, loaded.portfolio, today, context)
+        diagnostics = sorted([*diagnostics, *found], key=_rank)
     for diagnostic in diagnostics:
         context.out.write(diagnostic.render(data.display) + "\n")
     errors = sum(1 for d in diagnostics if d.severity == "error")
@@ -238,6 +323,29 @@ def _validate(args: argparse.Namespace, context: _Context) -> int:
         f"{_count(warnings, 'warning')}\n"
     )
     return EXIT_VIOLATIONS if errors else EXIT_OK
+
+
+def _since_previous_commit(
+    data: DataDir, portfolio: Portfolio, today: dt.date, context: _Context
+) -> list[Diagnostic]:
+    """P1 in ``validate``: the status and state changes since the previous commit. Outside
+    a git repository there is nothing to compare with, and validate still works (AC6)."""
+    try:
+        changes = recent_changes(
+            Git(data.root),
+            data,
+            today,
+            warn=lambda file, message: context.warn(
+                Diagnostic("warning", "P1", file, None, message)
+            ),
+        )
+    except NoPreviousCommit:
+        context.err.write(
+            "note: P1 was not checked — this shallow clone does not have the previous commit; "
+            "fetch the full history (fetch-depth: 0 on actions/checkout) to check it\n"
+        )
+        return []
+    return list(check_changes(portfolio, changes))
 
 
 def _report(args: argparse.Namespace, context: _Context) -> int:
@@ -256,10 +364,10 @@ def _report(args: argparse.Namespace, context: _Context) -> int:
     else:
         history = read_history(
             Git(data.root),
-            data.read_text(PRODUCTS_FILE),
+            data,
             today,
-            warn=lambda message: context.warn(
-                Diagnostic("warning", "N1", PRODUCTS_FILE, None, message)
+            warn=lambda file, message: context.warn(
+                Diagnostic("warning", "N1" if file == PRODUCTS_FILE else "P1", file, None, message)
             ),
         )
         portfolio = loaded.portfolio
@@ -270,6 +378,7 @@ def _report(args: argparse.Namespace, context: _Context) -> int:
                 clocks=clocks(portfolio, history, today),
                 next_action_since=history.next_action_since,
                 last_data_commit=history.last_data_commit,
+                changes=history.changes,
             )
         )
     context.out.write(rendered.markdown)
@@ -305,3 +414,156 @@ def _publishing_target(args: argparse.Namespace, context: _Context) -> tuple[str
             f"{repository}, or add --dry-run to preview without writing"
         )
     return repository, token
+
+
+# --------------------------------------------------------------------------- the gates
+
+
+def _validated(
+    args: argparse.Namespace, context: _Context, today: dt.date
+) -> tuple[DataDir, Portfolio] | None:
+    """The data, validated first: a command that judges the data judges only valid data.
+    On errors, print them like ``validate`` does and return None — the command exits 1."""
+    data, config = _open(args, context)
+    loaded = load_portfolio(data, config)
+    diagnostics = diagnose(loaded, today)
+    errors = [d for d in diagnostics if d.severity == "error"]
+    for warning in (d for d in diagnostics if d.severity == "warning"):
+        context.warn(warning)
+    if not errors:
+        return data, loaded.portfolio
+    for error in errors:
+        context.out.write(error.render(data.display) + "\n")
+    context.err.write(
+        f"portfolio-ops {args.command}: the data in {data.describe()} does not validate — "
+        f"{_count(len(errors), 'error')}; fix them first, then run {args.command} again\n"
+    )
+    return None
+
+
+def _product(portfolio: Portfolio, ident: str, command: str) -> Product:
+    product = portfolio.product(ident)
+    if product is not None:
+        return product
+    if portfolio.kernel(ident) is not None:
+        raise EnvironmentProblem(
+            f"'{ident}' is a kernel, and {command} checks a product — name a product instead"
+        )
+    raise EnvironmentProblem(f"there is no product '{ident}' in {PRODUCTS_FILE} — use its id")
+
+
+def _context(portfolio: Portfolio, name: str) -> str:
+    declared = portfolio.config.declared("contexts")
+    if name in declared:
+        return name
+    known = ", ".join(declared) if declared else "none is declared yet"
+    if name == ALL:
+        raise EnvironmentProblem(f"all is not a context — gate one context at a time: {known}")
+    raise EnvironmentProblem(
+        f"'{name}' is not a context — use one of vocabularies.contexts in config.yaml: {known}"
+    )
+
+
+def _gate(args: argparse.Namespace, context: _Context) -> int:
+    today: dt.date = args.today or context.today()
+    checked = _validated(args, context, today)
+    if checked is None:
+        return EXIT_VIOLATIONS
+    data, portfolio = checked
+    product = _product(portfolio, args.product, "gate")
+    the_gate = gate(portfolio, product, _context(portfolio, args.context), today)
+    diagnostics = run_gate(the_gate)
+    for diagnostic in diagnostics:
+        context.out.write(diagnostic.render(data.display) + "\n")
+    errors = sum(1 for d in diagnostics if d.severity == "error")
+    warnings = len(diagnostics) - errors
+    context.err.write(
+        f"portfolio-ops gate {product.id} --context {the_gate.context}: "
+        f"{'failed' if errors else 'passed'} — {_count(errors, 'error')}, "
+        f"{_count(warnings, 'warning')}; {_count(len(the_gate.risks), 'risk')} and "
+        f"{_count(len(the_gate.claims), 'claim')} bear on the move\n"
+    )
+    return EXIT_VIOLATIONS if errors else EXIT_OK
+
+
+def _idea_gate(args: argparse.Namespace, context: _Context) -> int:
+    today = context.today()
+    checked = _validated(args, context, today)
+    if checked is None:
+        return EXIT_VIOLATIONS
+    data, portfolio = checked
+    idea = _product(portfolio, args.idea, "idea-gate")
+    if idea.status != "idea":
+        raise EnvironmentProblem(
+            f"idea-gate checks an idea, and '{idea.id}' is {idea.status} — the idea gate is "
+            "the step from idea to active"
+        )
+    the_gate = idea_gate(portfolio, idea, today)
+    failures = run_idea_gate(the_gate)
+    context.out.write(render_idea_gate(the_gate, failures, data.display))
+    shared = (
+        f"{_count(len(the_gate.products), 'product')} and "
+        f"{_count(len(the_gate.kernels), 'kernel')} share its capabilities"
+    )
+    verdict = "failed" if failures else "passed"
+    context.err.write(f"portfolio-ops idea-gate {idea.id}: {verdict} — {shared}\n")
+    return EXIT_VIOLATIONS if failures else EXIT_OK
+
+
+# --------------------------------------------------------------------------- memory
+
+
+def _lookup(args: argparse.Namespace, context: _Context) -> int:
+    today: dt.date = args.today or context.today()
+    checked = _validated(args, context, today)
+    if checked is None:
+        return EXIT_VIOLATIONS
+    data, portfolio = checked
+    subject, kind = args.subject, args.type
+    known = subject == PORTFOLIO or portfolio.product(subject) or portfolio.kernel(subject)
+    if not known:
+        raise EnvironmentProblem(
+            f"'{subject}' is not a product, a kernel or portfolio — look up the subject a "
+            "finding would record"
+        )
+    types = portfolio.config.finding_types
+    if kind not in types:
+        raise EnvironmentProblem(
+            f"'{kind}' is not a finding type — use one of: {', '.join(types)} (claim is built "
+            "in; the others come from vocabularies.finding_types in config.yaml)"
+        )
+    found = lookup(portfolio, subject, kind)
+    place = data.describe(FINDINGS_FILE)
+    for item in found:
+        finding = item.finding
+        where = f"{place}:{finding.loc.line}"
+        if item.holds(today):
+            result = " ".join((finding.result or "").split())
+            context.out.write(
+                f"reuse {where}: finding '{finding.id}' holds until {item.until} — {result}\n"
+            )
+        else:
+            fields = (
+                "result, checked_on and expires_on"
+                if "expires_on" in finding.present
+                else "result and checked_on"
+            )
+            context.out.write(
+                f"re-check {where}: finding '{finding.id}' held until {item.until} — check it "
+                f"again, then update its {fields}\n"
+            )
+    if not found:
+        about = "the portfolio" if subject == PORTFOLIO else subject
+        context.out.write(
+            f"check: no finding records a {kind} about {about} — check it, then record the "
+            f"result in {FINDINGS_FILE}\n"
+        )
+    holding = sum(1 for item in found if item.holds(today))
+    if holding:
+        verdict = f"{_count(holding, 'finding')} {'holds' if holding == 1 else 'hold'}"
+    elif found:
+        verdict = f"nothing holds; {_count(len(found), 'finding')} expired"
+    else:
+        verdict = "nothing is recorded yet"
+    context.err.write(f"portfolio-ops lookup {subject} {kind}: {verdict}\n")
+    return EXIT_OK

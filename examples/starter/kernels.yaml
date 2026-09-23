@@ -1,7 +1,12 @@
 # Fictional shared code. Tidewatch uses Sync Core as a package; Fern Journal still carries
-# a copy of it.
+# a copy of it. No product uses Map Tiles yet, so it is still planned — the idea gate
+# points Lantern Maps at it.
 kernels:
   - id: sync-core
     name: Sync Core
     capabilities: [offline-sync]
     min_package_consumers: 2
+
+  - id: map-tiles
+    name: Map Tiles
+    capabilities: [maps]

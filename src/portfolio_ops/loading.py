@@ -791,6 +791,25 @@ def product_values(text: str) -> dict[str, tuple[Any, Any]] | None:
     return values
 
 
+def risk_states(text: str) -> dict[str, Any] | None:
+    """``state`` per risk id in one version of risks.yaml, for P1 to compare versions by
+    value. risks.yaml is optional, so an empty file or list means no risks; None for a
+    version that does not parse."""
+    doc = parse_yaml(text, RISKS_FILE)
+    if doc.fatal or not isinstance(doc.value, dict | None):
+        return None
+    entries = doc.mapping().get("risks")
+    if entries is None:
+        return {}
+    if not isinstance(entries, list):
+        return None
+    values: dict[str, Any] = {}
+    for entry in entries:
+        if isinstance(entry, dict) and isinstance(entry.get("id"), str):
+            values.setdefault(entry["id"], entry.get("state"))
+    return values
+
+
 def iter_unique(items: Iterable[Diagnostic]) -> Iterator[Diagnostic]:
     seen: set[tuple[str, str, int | None, str]] = set()
     for item in items:

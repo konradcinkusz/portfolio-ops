@@ -17,6 +17,9 @@ COMMANDS = [
     ["report"],
     ["report", "--today", "2026-09-22"],
     ["report", "--publish", "--dry-run", "--repo", "owner/name"],
+    ["gate", "alpha", "--context", "website"],
+    ["idea-gate", "delta"],
+    ["lookup", "delta", "name_check"],
 ]
 
 

@@ -1,8 +1,8 @@
 """The git adapter (P11): the only place the engine runs git.
 
-Only ``report`` needs history (spec §7.2); ``validate`` asks git at most where the
-repository root is and what ``origin`` points at, and copes with the answer "there is
-no repository".
+Only ``report`` needs the full history (spec §7.2). ``validate`` asks git where the
+repository root is, what ``origin`` points at and what changed since the previous commit
+(P1), and copes with the answer "there is no repository".
 """
 
 from __future__ import annotations
@@ -57,9 +57,17 @@ class Git:
     def origin_url(self) -> str | None:
         return self._text("remote", "get-url", "origin") or None
 
-    def commits_touching(self, pathspec: str) -> list[Commit]:
-        """The commits that changed ``pathspec`` (relative to ``cwd``), newest first."""
-        out = self._text("log", "--format=%H %ct", "--", pathspec)
+    def revision(self, name: str) -> str | None:
+        """The commit ``name`` resolves to, or None when this clone does not have it — the
+        parent of a root commit, or of the oldest commit of a shallow clone."""
+        return self._text("rev-parse", "--verify", "--quiet", f"{name}^{{commit}}") or None
+
+    def commits_touching(self, pathspec: str, revisions: str | None = None) -> list[Commit]:
+        """The commits in ``revisions`` — by default all of HEAD's history — that changed
+        ``pathspec`` (relative to ``cwd``), newest first."""
+        out = self._text(
+            "log", "--format=%H %ct", *([revisions] if revisions else []), "--", pathspec
+        )
         commits = []
         for line in (out or "").splitlines():
             sha, _, stamp = line.partition(" ")

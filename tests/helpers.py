@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # imported lazily, so a test that needs no CLI never loads one
     from portfolio_ops.github import Request, Response
+    from portfolio_ops.model import Portfolio
 
 FIXTURES = Path(__file__).parent / "fixtures"
 TODAY = dt.date(2026, 9, 22)
@@ -35,6 +36,22 @@ def write_files(root: Path, files: Mapping[str, str]) -> Path:
 def copy_fixture(name: str, dest: Path) -> Path:
     shutil.copytree(FIXTURES / name, dest)
     return dest
+
+
+def load_valid(root: Path, files: Mapping[str, str] | None = None) -> Portfolio:
+    """The typed model of the valid fixture, copied to ``root``, with ``files`` replaced.
+
+    The data must still load without a shape problem; rule violations are the caller's
+    business.
+    """
+    from portfolio_ops.loading import DataDir, load_portfolio, read_config
+
+    copy_fixture("valid", root)
+    write_files(root, files or {})
+    data = DataDir(root)
+    loaded = load_portfolio(data, read_config(data))
+    assert loaded.problems == (), [p.render() for p in loaded.problems]
+    return loaded.portfolio
 
 
 # --------------------------------------------------------------------------- GitHub

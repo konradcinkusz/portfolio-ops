@@ -11,10 +11,31 @@ import pytest
 from helpers import TODAY, copy_fixture, write_files
 from portfolio_ops.history import Clock
 from portfolio_ops.loading import DataDir, load_portfolio, read_config
+from portfolio_ops.model import Change
 from portfolio_ops.report import ReportInput
 
 Build = Callable[..., ReportInput]
+Golden = Callable[[str, str], None]
 LONG_AGO = dt.date(2026, 1, 1)
+GOLDEN = Path(__file__).parent / "golden"
+
+
+@pytest.fixture
+def golden(request: pytest.FixtureRequest) -> Golden:
+    """``golden(name, text)``: the text equals golden/<name>, byte for byte.
+
+    With ``pytest --update-golden`` it rewrites the file instead; review the diff like any
+    other change.
+    """
+
+    def check(name: str, text: str) -> None:
+        path = GOLDEN / name
+        if request.config.getoption("--update-golden"):
+            path.parent.mkdir(exist_ok=True)
+            path.write_text(text, encoding="utf-8", newline="\n")
+        assert text == path.read_text(encoding="utf-8")
+
+    return check
 
 
 def day(text: str) -> dt.date:
@@ -23,11 +44,13 @@ def day(text: str) -> dt.date:
 
 @pytest.fixture
 def build(tmp_path: Path) -> Build:
-    """``build(files, clocks=..., changed=...)``: a ReportInput over the valid fixture.
+    """``build(files, clocks=..., changed=..., changes=...)``: a ReportInput over the valid
+    fixture.
 
     ``clocks`` maps each active product to the date its clock starts; ``changed`` maps a
     product to the date its next action last changed (by default its clock start, or long
-    ago for a product without a clock).
+    ago for a product without a clock); ``changes`` are the status and state changes history
+    would have found (P1).
     """
 
     def make(
@@ -37,6 +60,7 @@ def build(tmp_path: Path) -> Build:
         changed: dict[str, str] | None = None,
         today: dt.date = TODAY,
         last_commit: str | None = "2026-09-20",
+        changes: tuple[Change, ...] = (),
     ) -> ReportInput:
         root = copy_fixture("valid", tmp_path / f"data-{len(list(tmp_path.iterdir()))}")
         write_files(root, files or {})
@@ -62,6 +86,7 @@ def build(tmp_path: Path) -> Build:
             },
             next_action_since=next_action_since,
             last_data_commit=day(last_commit) if last_commit else None,
+            changes=changes,
         )
 
     return make

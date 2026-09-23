@@ -2,8 +2,8 @@
 
 A section is a function from the report's input to a titled block of Markdown, and it is
 registered under its position — the same registry pattern as the rules (P10). R2 fixes
-the order; phase 2 adds sections by registering more functions, not by editing the
-renderer.
+the order; phase 2 added its four sections by registering more functions, not by editing
+the renderer.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from portfolio_ops.history import Clock
-from portfolio_ops.model import Portfolio
+from portfolio_ops.model import Change, Portfolio
 
 
 @dataclass(frozen=True)
@@ -23,13 +23,14 @@ class ReportInput:
     clocks: Mapping[str, Clock]  # N1, for every active product
     next_action_since: Mapping[str, dt.date]  # every product
     last_data_commit: dt.date | None
+    changes: tuple[Change, ...] = ()  # P1: every status and state change in history
 
 
 @dataclass(frozen=True)
 class Section:
     title: str
     lines: tuple[str, ...]  # the Markdown body
-    has_items: bool  # whether the section puts the report in "has items" (§7.4)
+    has_items: bool  # whether the section puts the report in "has items" (§7.4, R1)
 
 
 SectionFunction = Callable[[ReportInput], Section]

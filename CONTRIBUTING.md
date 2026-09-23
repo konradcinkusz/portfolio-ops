@@ -49,7 +49,11 @@ CI runs all of these on every pull request — lint, types, the tests on Python 
 | Rules S1–S5, P2, L1, L2 | `src/portfolio_ops/rules/` | `tests/unit/rules/`, `tests/fixtures/<rule-id>/` |
 | Visibility guard (S7) | `src/portfolio_ops/guard.py`, `src/portfolio_ops/github.py` | `tests/unit/test_guard.py` |
 | The clock (N1) | `src/portfolio_ops/history.py`, `src/portfolio_ops/git.py` | `tests/integration/test_clock.py` |
-| The report (N2–N4, R1–R3) | `src/portfolio_ops/report/` | `tests/unit/report/` |
+| Changes and their decisions (P1) | `src/portfolio_ops/rules/changes.py`, `src/portfolio_ops/history.py` | `tests/unit/rules/test_changes.py`, `tests/integration/test_changes.py` |
+| The report (N2–N4, R1–R3, K2) | `src/portfolio_ops/report/` | `tests/unit/report/` |
+| Gates (B1–B6) | `src/portfolio_ops/rules/gates.py`, `src/portfolio_ops/report/overlap.py` | `tests/unit/rules/test_gates.py`, `tests/unit/test_gate_commands.py`, `tests/fixtures/B*/` |
+| Kernels (K1, K2) | `src/portfolio_ops/rules/kernels.py` | `tests/unit/rules/test_kernels.py` |
+| Lookup (P3) | `src/portfolio_ops/rules/memory.py` | `tests/unit/rules/test_memory.py`, `tests/unit/test_lookup_command.py` |
 | Command line | `src/portfolio_ops/cli.py` | `tests/unit/test_cli.py` |
 | Composite action | `action.yml` | the `self-test` job in `.github/workflows/ci.yml` |
 
@@ -58,7 +62,8 @@ CI runs all of these on every pull request — lint, types, the tests on Python 
 1. Change [docs/business-rules.md](docs/business-rules.md) first, or open a
    "Rule question or proposal" issue.
 2. Write the rule as a function in `src/portfolio_ops/rules/` and register it with
-   `@rule("ID", "summary")` — no base class to inherit (P10). Rules are pure: they read the
+   `@rule("ID", "summary")` — or `@gate_check("ID")` / `@idea_check("ID")` for a check of
+   `gate` or `idea-gate` — no base class to inherit (P10). Rules are pure: they read the
    typed model and today's date and return diagnostics; they never read files, git or the
    network.
 3. Add a fixture under `tests/fixtures/<rule-id>/` that differs from `tests/fixtures/valid/`
@@ -88,6 +93,15 @@ text the engine really prints — a test keeps this table honest.
 | `is not valid YAML` | `schema`: the file does not parse | Fix the syntax at the line shown |
 | `is not supported by portfolio-ops` | S6: the data format and the engine version differ | Follow [docs/migrations/](docs/migrations/README.md), or pin a matching engine version |
 | `schema_version is missing` | S6: config.yaml does not say which format it uses | Add `schema_version: 1` |
+| `and no decision names it on that day` | P1 (warning): a product's status or a risk's state changed with no decision dated that day | Add the heading the message shows to decisions.md — a decision may be dated in the past |
+| `a transition the product lifecycle does not have` | P1 (warning): the status moved in a way §5 does not allow | Move it along §5 next time; the report shows it for a week |
+| `P1 was not checked` | `validate` on a shallow clone cannot see the previous commit | Set `fetch-depth: 0` on `actions/checkout`, or run `git fetch --unshallow` |
+| `is open with severity` | B2: an open high or critical risk applies to the move | Mitigate it and lower its severity, or accept it until a date with a `risk_accepted` decision |
+| `so it counts as open again` | B2: the acceptance of a high or critical risk has ended | Renew it with a later `accepted_until` and a `risk_accepted` decision, or mitigate the risk |
+| `held only until` | B4: a claim used in this context has expired | Verify it again before the move, then update `checked_on` (and `expires_on`) |
+| `by archiving the idea` | B6: an existing product already has half of the idea's capabilities | Archive the idea to merge it into that product, or record an `admit` decision that names it and says why it stands apart |
+| `is not a context` | `gate` needs one of the contexts you declared | Use a context from `vocabularies.contexts` in config.yaml, or add it there |
+| `idea-gate checks an idea` | `idea-gate` compares a product whose status is `idea` | Name the idea, or give the product the status `idea` if it is one |
 | `does not set allow_public: true` | S7: the data repository is public | Make the repository private, or set `allow_public: true` if you build in public |
 | `cannot tell whether the data repository is public` | S7: the guard could not ask GitHub | In Actions: pass the workflow's token and check its access. Locally this is a warning only |
 | `this is a shallow clone` | `report` needs the full history for the clock | Set `fetch-depth: 0` on `actions/checkout`, or run `git fetch --unshallow` |

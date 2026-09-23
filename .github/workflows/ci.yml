@@ -132,7 +132,7 @@ jobs:
       contents: read
       issues: read # the dry run reads the open weekly-review issues
     steps:
-      # The default shallow checkout, on purpose: report must fetch the history itself.
+      # The default shallow checkout, on purpose: the action must fetch the history itself.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false

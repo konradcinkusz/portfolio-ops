@@ -13,16 +13,14 @@ from dataclasses import dataclass
 from portfolio_ops.model import Diagnostic
 from portfolio_ops.report import SECTIONS, ReportInput, title
 
-LEFT_OUT = (
-    "Stale, Escalations, Overdue reviews, Focus and Health are left out until the data validates."
-)
+LEFT_OUT = "The other sections are left out until the data validates."
 
 
 @dataclass(frozen=True)
 class Rendered:
     title: str
     markdown: str
-    has_items: bool  # §7.4: sections 1–4 non-empty, or no focus this week
+    has_items: bool  # a section with items, or no focus this week (§7.4)
 
 
 def _header(today: dt.date) -> list[str]:
