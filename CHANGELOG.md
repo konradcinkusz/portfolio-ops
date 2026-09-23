@@ -9,7 +9,7 @@ Notable changes to portfolio-ops. The format follows
 To release, replace "Unreleased" with the date, then push the tag; the release workflow
 refuses an undated entry.
 
-## [0.3.0] — Unreleased
+## [0.3.0] — 2026-09-23
 
 Phase 3 of the [business rules](docs/business-rules.md), revision r1 (§9.3).
 
@@ -40,6 +40,11 @@ Phase 3 of the [business rules](docs/business-rules.md), revision r1 (§9.3).
 
 - Each decision keeps the text under its heading, which both views show.
 - ADRs 0005 and 0006 are accepted, with the merge of phase 2.
+
+### Fixed
+
+- The report's Health line read "Median clock of active products: 1 days"; it now reads
+  "1 day".
 
 ## [0.2.0] — 2026-09-23
 

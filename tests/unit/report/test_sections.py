@@ -214,6 +214,25 @@ def test_health_reports_the_measures_of_section_10(build: Build) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("clocks", "median"),
+    [
+        ({"alpha": "2026-09-21"}, "1 day"),
+        ({"alpha": "2026-09-22"}, "0 days"),
+        ({"alpha": "2026-09-21", "delta": "2026-09-20"}, "1.5 days"),
+    ],
+)
+def test_the_median_clock_reads_as_days(build: Build, clocks: dict[str, str], median: str) -> None:
+    products = PRODUCTS.replace(
+        "    status: idea\n    capabilities: [maps]",
+        "    status: active\n    next_action: Sketch the map\n    capabilities: [maps]",
+    )
+
+    lines = sections.health(build({"products.yaml": products}, clocks=clocks)).lines
+
+    assert f"- Median clock of active products: {median}" in lines
+
+
 def test_health_without_active_products_or_commits(build: Build) -> None:
     products = PRODUCTS.replace(
         "    status: active\n    next_action: Write the first draft of the sync protocol",
