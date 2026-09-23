@@ -9,6 +9,38 @@ Notable changes to portfolio-ops. The format follows
 To release, replace "Unreleased" with the date, then push the tag; the release workflow
 refuses an undated entry.
 
+## [0.3.0] — Unreleased
+
+Phase 3 of the [business rules](docs/business-rules.md), revision r1 (§9.3).
+
+### Added
+
+- `portfolio-ops dashboard`: the whole portfolio as one static HTML page (V1), with:
+  - summary tiles
+  - every product by status, with next actions, clocks and reviews
+  - kernels with their state (K1) and consumers
+  - risks and findings, with what has lapsed
+  - the capability map
+  - the latest decisions with their text
+
+  The page is self-contained: the stylesheet is inline, it loads nothing, and a
+  Content-Security-Policy allows only that stylesheet. It says it is private and asks
+  not to be indexed. Without git history it leaves out the clocks and says why.
+  `--output FILE` writes it to a file.
+- `portfolio-ops export`: size-bounded Markdown for an LLM session (V2), holding:
+  - the active and paused products with their next actions
+  - the open risks of severity medium or higher
+  - the latest decisions, which fill what `--max-chars` leaves (12000 by default)
+  - the capability vocabulary
+- The action runs `command: dashboard` and sets the output `dashboard` to the page's path,
+  for `actions/upload-artifact`. CI keeps the example dashboard as an artifact.
+- ADR 0007 (the views).
+
+### Changed
+
+- Each decision keeps the text under its heading, which both views show.
+- ADRs 0005 and 0006 are accepted, with the merge of phase 2.
+
 ## [0.2.0] — 2026-09-23
 
 Phase 2 of the [business rules](docs/business-rules.md), revision r1 (§9.2).
@@ -63,5 +95,6 @@ Phase 1 of the [business rules](docs/business-rules.md), revision r1 (§9.1).
   dependency audit, secret scan, action self-test), CodeQL, a tag-driven release workflow,
   Dependabot, templates and ADRs 0001–0004.
 
+[0.3.0]: https://github.com/konradcinkusz/portfolio-ops/releases/tag/v0.3.0
 [0.2.0]: https://github.com/konradcinkusz/portfolio-ops/releases/tag/v0.2.0
 [0.1.0]: https://github.com/konradcinkusz/portfolio-ops/releases/tag/v0.1.0

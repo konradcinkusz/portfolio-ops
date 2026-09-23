@@ -263,8 +263,8 @@ Prefixes: S structure, L limit, N pressure, P memory, R report, B gates, K kerne
 | K2 | A product consumes a kernel in `copy` mode | `report` | item under Copy-paste debt | 2 | implemented (v0.2.0) | `portfolio_ops.report.sections.copy_paste_debt` |
 | P1 | A product's status or a risk's state changes without a decision that names the id and is dated on the day of the change; a status transition outside §5 | CI (`validate` against the previous commit), `report` | warning and report item — never blocking | 2 | implemented (v0.2.0) | `portfolio_ops.rules.changes.check_changes` |
 | P3 | Before a new check, look up (`subject`, `type`): reuse a valid finding; re-check and update an expired one | `lookup`, procedure | — | 2 | implemented (v0.2.0) | `portfolio_ops.rules.memory.lookup` |
-| V1 | Dashboard: static HTML generated from the data; for a private data repository never published to GitHub Pages — a workflow artifact or a local file | `dashboard` | — | 3 | planned | — |
-| V2 | Context export: size-bounded Markdown for LLM sessions — active and paused products with their next actions, open risks of severity `medium` or higher, the latest decisions, the capability vocabulary | `export` | — | 3 | planned | — |
+| V1 | Dashboard: static HTML generated from the data; for a private data repository never published to GitHub Pages — a workflow artifact or a local file | `dashboard` | — | 3 | implemented (v0.3.0) | `portfolio_ops.views.dashboard.render_dashboard` |
+| V2 | Context export: size-bounded Markdown for LLM sessions — active and paused products with their next actions, open risks of severity `medium` or higher, the latest decisions, the capability vocabulary | `export` | — | 3 | implemented (v0.3.0) | `portfolio_ops.views.export.render_export` |
 
 ## 7. Operational definitions
 

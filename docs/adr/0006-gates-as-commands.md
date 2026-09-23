@@ -1,10 +1,12 @@
 # ADR 0006 — The gates and lookup are commands that judge only valid data
 
-- **Status:** proposed, 2026-09-23 — accepted when the owner merges phase 2
+- **Status:** accepted, 2026-09-23, with the merge of phase 2
 - **Decided by:** the engine's reading of business rules §6 B1–B6 and P3, for the owner
   to confirm
 - **Governs:** `src/portfolio_ops/rules/gates.py`, `src/portfolio_ops/rules/memory.py`,
   `src/portfolio_ops/report/overlap.py`, the `gate`, `idea-gate` and `lookup` commands
+- **Amended by:** [ADR 0007](0007-views.md) — the action also runs `dashboard`; the gates,
+  `lookup` and `export` still run locally
 
 ## Context
 
