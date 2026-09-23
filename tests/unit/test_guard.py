@@ -23,6 +23,7 @@ COMMANDS = [
     ["idea-gate", "delta"],
     ["lookup", "delta", "name_check"],
     ["dashboard"],
+    ["export"],
 ]
 
 

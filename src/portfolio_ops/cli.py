@@ -1,16 +1,16 @@
 """The command line: ``validate`` and ``report`` (spec §7.6), the gates ``gate`` and
-``idea-gate`` (§6 B1–B6), ``lookup`` (P3), the view ``dashboard`` (V1), and the exit
-codes of §7.7.
+``idea-gate`` (§6 B1–B6), ``lookup`` (P3), the views ``dashboard`` (V1) and ``export``
+(V2), and the exit codes of §7.7.
 
 Every command runs in the order of §7.3: read config.yaml, check ``schema_version``
 (S6), run the visibility guard (S7), then everything else. Every command but
 ``validate`` then validates the data and works on nothing that does not validate.
 
 Output: diagnostics — one line per finding, §7.8 — go to standard output for
-``validate`` and ``gate``; Markdown for ``report`` and ``idea-gate``; one line per
-recorded finding for ``lookup``; HTML for ``dashboard``, unless it writes a file. Warnings
-that are not the command's product, environment errors and summaries go to standard
-error, so the standard output of every command can be piped as it is.
+``validate`` and ``gate``; Markdown for ``report``, ``idea-gate`` and ``export``; one
+line per recorded finding for ``lookup``; HTML for ``dashboard``, unless it writes a
+file. Warnings that are not the command's product, environment errors and summaries go
+to standard error, so the standard output of every command can be piped as it is.
 """
 
 from __future__ import annotations
@@ -68,6 +68,7 @@ from portfolio_ops.rules.changes import check_changes
 from portfolio_ops.rules.gates import gate, idea_gate, run_gate, run_idea_gate
 from portfolio_ops.rules.memory import lookup
 from portfolio_ops.views.dashboard import DashboardInput, render_dashboard
+from portfolio_ops.views.export import DEFAULT_MAX_CHARS, TooSmall, render_export
 
 
 class _Parser(argparse.ArgumentParser):
@@ -87,6 +88,16 @@ def _date(text: str) -> dt.date:
     value = parse_date(text)
     if value is None:
         raise argparse.ArgumentTypeError(f"expected a real date written YYYY-MM-DD, got {text!r}")
+    return value
+
+
+def _positive(text: str) -> int:
+    try:
+        value = int(text)
+    except ValueError:
+        value = 0
+    if value < 1:
+        raise argparse.ArgumentTypeError(f"expected a whole number above 0, got {text!r}")
     return value
 
 
@@ -111,7 +122,7 @@ def build_parser(out: IO[str], err: IO[str]) -> argparse.ArgumentParser:
     commands = parser.add_subparsers(
         dest="command",
         required=True,
-        metavar="{validate,report,gate,idea-gate,lookup,dashboard}",
+        metavar="{validate,report,gate,idea-gate,lookup,dashboard,export}",
     )
     path_help = "the data directory (default: the root of the git repository, else '.')"
     check = commands.add_parser(
@@ -229,6 +240,31 @@ def build_parser(out: IO[str], err: IO[str]) -> argparse.ArgumentParser:
         metavar="FILE",
         help="write the page to FILE (default: standard output)",
     )
+    context_export = commands.add_parser(
+        "export",
+        help="print the portfolio as size-bounded Markdown for an LLM session",
+        description=(
+            "Print the active and paused products with their next actions, the open risks of "
+            "severity medium or higher, the latest decisions and the capability vocabulary, "
+            "as Markdown of at most --max-chars characters."
+        ),
+        out=out,
+        err=err,
+    )
+    context_export.add_argument("--path", metavar="DIR", help=path_help)
+    context_export.add_argument(
+        "--today",
+        metavar="YYYY-MM-DD",
+        type=_date,
+        help="the date to export the portfolio on (default: today, UTC)",
+    )
+    context_export.add_argument(
+        "--max-chars",
+        metavar="N",
+        type=_positive,
+        default=DEFAULT_MAX_CHARS,
+        help=f"the most characters the export may have (default: {DEFAULT_MAX_CHARS})",
+    )
     return parser
 
 
@@ -283,6 +319,7 @@ def main(
         "idea-gate": _idea_gate,
         "lookup": _lookup,
         "dashboard": _dashboard,
+        "export": _export,
     }
     try:
         return commands[args.command](args, context)
@@ -654,6 +691,27 @@ def _history_if_any(data: DataDir, today: dt.date, context: _Context) -> tuple[H
         return read_history(git, data, today, warn=_history_warning(context)), ""
     context.err.write(f"note: the dashboard shows no clocks — {missing}\n")
     return None, missing
+
+
+def _export(args: argparse.Namespace, context: _Context) -> int:
+    today: dt.date = args.today or context.today()
+    checked = _validated(args, context, today, errors_to=context.err)
+    if checked is None:
+        return EXIT_VIOLATIONS
+    _, portfolio = checked
+    try:
+        exported = render_export(portfolio, today, args.max_chars)
+    except TooSmall as small:
+        raise EnvironmentProblem(
+            f"the export needs at least {small.needed} characters for its products, risks and "
+            f"capability vocabulary — raise --max-chars to {small.needed} or more"
+        ) from small
+    context.out.write(exported.markdown)
+    context.err.write(
+        f"portfolio-ops export: {len(exported.markdown)} of at most {args.max_chars} "
+        f"characters, with {exported.decisions} of {_count(exported.of, 'decision')}\n"
+    )
+    return EXIT_OK
 
 
 def _write_output(output: str | None, text: str, context: _Context) -> str:

@@ -1,5 +1,5 @@
-"""The views as commands: ``dashboard`` (V1) — where the page goes, and what happens on data
-that does not validate or on an output that cannot be written."""
+"""The views as commands: ``dashboard`` (V1) and ``export`` (V2) — where their output goes,
+and what happens on data that does not validate or on a request they cannot meet."""
 
 from __future__ import annotations
 
@@ -70,3 +70,49 @@ def test_an_output_that_cannot_be_written_exits_2(data: Path, tmp_path: Path) ->
     assert run.code == 2
     assert run.out == ""
     assert f"cannot write {page}: " in run.err
+
+
+def test_export_prints_the_markdown_and_says_how_much_it_holds(data: Path) -> None:
+    run = run_cli(["export", "--path", str(data)])
+
+    assert run.code == 0, run.err
+    assert run.out.startswith("# Portfolio context — 2026-09-22\n")
+    assert run.err == (
+        f"portfolio-ops export: {len(run.out)} of at most 12000 characters, with 3 of 3 decisions\n"
+    )
+
+
+def test_export_leaves_out_the_oldest_decisions_to_stay_within_max_chars(data: Path) -> None:
+    run = run_cli(["export", "--path", str(data), "--max-chars", "1000"])
+
+    assert run.code == 0, run.err
+    assert len(run.out) <= 1000
+    assert "The rest are left out to stay within 1000 characters" in run.out
+    assert run.err.endswith(" of at most 1000 characters, with 1 of 3 decisions\n")
+
+
+def test_a_limit_the_fixed_parts_do_not_fit_in_exits_2(data: Path) -> None:
+    run = run_cli(["export", "--path", str(data), "--max-chars", "100"])
+
+    assert run.code == 2
+    assert run.out == ""
+    assert "the export needs at least " in run.err
+    assert "raise --max-chars to " in run.err
+
+
+@pytest.mark.parametrize("value", ["0", "-5", "many", "1.5"])
+def test_max_chars_is_a_whole_number_above_0(data: Path, value: str) -> None:
+    run = run_cli(["export", "--path", str(data), "--max-chars", value])
+
+    assert run.code == 2
+    assert f"expected a whole number above 0, got '{value}'" in run.err
+
+
+def test_export_shows_only_data_that_validates(tmp_path: Path) -> None:
+    root = copy_fixture("S4", tmp_path / "S4")
+
+    run = run_cli(["export", "--path", str(root)])
+
+    assert run.code == 1
+    assert run.out == ""
+    assert run.err.startswith("error S4 ")
