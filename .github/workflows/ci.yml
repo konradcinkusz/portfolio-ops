@@ -10,7 +10,8 @@ name: CI
 #    audit        pip-audit over every installed package
 #    secret-scan  gitleaks over the full history, the same pinned hook pre-commit runs
 #    self-test    the composite action against examples/starter, the way a data
-#                 repository calls it (AC9)
+#                 repository calls it (AC9), keeping the example dashboard as an
+#                 artifact to look at
 #
 #  Third-party actions are pinned by full commit SHA with the version in a comment,
 #  and kept current by Dependabot: people run this code on their private data (D7).
@@ -148,6 +149,30 @@ jobs:
           path: examples/starter
           publish: "true"
           dry-run: "true"
+      - name: dashboard
+        id: dashboard
+        uses: ./
+        with:
+          command: dashboard
+          path: examples/starter
+      - name: The dashboard is one page that fetches nothing
+        env:
+          PAGE: ${{ steps.dashboard.outputs.dashboard }}
+        run: |
+          set -euo pipefail
+          grep -q '<meta name="robots" content="noindex, nofollow">' "$PAGE"
+          grep -q 'never publish it on GitHub Pages' "$PAGE"
+          if grep -Eq '<script|<link|<img|<iframe| src=|url\(|://' "$PAGE"; then
+            echo "::error::the dashboard must not load anything: $(grep -Eo '<script|<link|<img|<iframe| src=|url\(|://' "$PAGE" | head -1)"
+            exit 1
+          fi
+      - name: Keep the example dashboard to look at
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: example-dashboard
+          path: ${{ steps.dashboard.outputs.dashboard }}
+          if-no-files-found: error
+          retention-days: 7
       - name: validate a fixture that breaks S4
         id: broken
         continue-on-error: true
