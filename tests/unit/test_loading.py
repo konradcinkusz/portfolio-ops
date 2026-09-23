@@ -329,6 +329,22 @@ def test_decision_lines_are_counted_from_the_top_of_the_file() -> None:
     assert [d.line for d in decisions] == [3, 6]
 
 
+def test_each_decision_keeps_the_text_under_its_heading() -> None:
+    decisions = parse_decisions(
+        "# Decisions\n\nText before the first decision belongs to none.\n\n"
+        "## 2026-09-01 · a · focus\n\nWhy a.\n### A lower heading is text\n"
+        "```\n## so is a heading in a code block\n```\n\n\n"
+        "## 2026-09-08 · b · focus\n"
+        "## 2026-09-09 · c · focus\n  \nWhy c, with a hard break.  \n"
+    )
+
+    assert [d.text for d in decisions] == [
+        "Why a.\n### A lower heading is text\n```\n## so is a heading in a code block\n```",
+        "",
+        "Why c, with a hard break.  ",
+    ]
+
+
 # ------------------------------------------------------------------ the published schemas
 
 

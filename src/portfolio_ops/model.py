@@ -182,10 +182,12 @@ class Finding:
 
 @dataclass(frozen=True)
 class Decision:
-    """A level-2 heading of decisions.md (§4.6).
+    """A level-2 heading of decisions.md (§4.6), and the free Markdown under it.
 
     ``error`` says why the heading does not follow the grammar; S3 reports it. A
     heading that parses has ``error`` set to None and every other field filled in.
+    ``text`` runs from the line after the heading to the next level-2 heading, without
+    the blank lines around it — the justification the views show (V1, V2).
     """
 
     line: int
@@ -194,6 +196,7 @@ class Decision:
     ids: tuple[str, ...] = ()
     type: str | None = None
     error: str | None = None
+    text: str = ""
 
 
 @dataclass(frozen=True)

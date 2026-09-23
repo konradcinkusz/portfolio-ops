@@ -28,7 +28,7 @@ import datetime as dt
 import json
 import re
 from collections.abc import Iterable, Iterator, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import cache
 from importlib import resources
 from pathlib import Path as FsPath
@@ -731,27 +731,44 @@ GRAMMAR = "## <YYYY-MM-DD> · <id>[, <id>…] · <type>"
 
 
 def parse_decisions(text: str) -> tuple[Decision, ...]:
-    """Every level-2 heading of decisions.md, parsed against the grammar of §4.6.
+    """Every level-2 heading of decisions.md, parsed against the grammar of §4.6, with the
+    text under it.
 
     Headings inside fenced code blocks are text, as Markdown renders them; other heading
-    levels are free text too.
+    levels are free text too. The text before the first level-2 heading belongs to no
+    decision.
     """
-    decisions = []
+    headings: list[Decision] = []
+    bodies: list[list[str]] = []
     fence: str | None = None
     for number, line in enumerate(text.splitlines(), start=1):
         opening = _FENCE.match(line)
         if fence is not None:
             if opening and opening.group(1)[0] == fence[0] and len(opening.group(1)) >= len(fence):
                 fence = None
-            continue
-        if opening:
+        elif opening:
             fence = opening.group(1)
-            continue
-        match = _ATX.match(line)
-        if match and len(match.group(1)) == 2:
+        elif (match := _ATX.match(line)) and len(match.group(1)) == 2:
             heading = _CLOSING.sub("", line[match.end() :]).strip()
-            decisions.append(parse_heading(number, heading))
-    return tuple(decisions)
+            headings.append(parse_heading(number, heading))
+            bodies.append([])
+            continue
+        if bodies:
+            bodies[-1].append(line)
+    return tuple(
+        replace(decision, text=_trimmed(body))
+        for decision, body in zip(headings, bodies, strict=True)
+    )
+
+
+def _trimmed(lines: list[str]) -> str:
+    """The lines, without the blank ones before and after them."""
+    start, end = 0, len(lines)
+    while start < end and not lines[start].strip():
+        start += 1
+    while end > start and not lines[end - 1].strip():
+        end -= 1
+    return "\n".join(lines[start:end])
 
 
 def parse_heading(line: int, heading: str) -> Decision:
