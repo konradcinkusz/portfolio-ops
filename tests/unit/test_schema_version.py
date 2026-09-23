@@ -19,6 +19,7 @@ COMMANDS = [
     ["report", "--publish", "--dry-run", "--repo", "owner/name"],
     ["gate", "alpha", "--context", "website"],
     ["idea-gate", "delta"],
+    ["lookup", "delta", "name_check"],
 ]
 
 

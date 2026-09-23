@@ -1,15 +1,15 @@
 """The command line: ``validate`` and ``report`` (spec §7.6), the gates ``gate`` and
-``idea-gate`` (§6 B1–B6), and the exit codes of §7.7.
+``idea-gate`` (§6 B1–B6), ``lookup`` (P3), and the exit codes of §7.7.
 
 Every command runs in the order of §7.3: read config.yaml, check ``schema_version``
 (S6), run the visibility guard (S7), then everything else. Every command but
 ``validate`` then validates the data and judges nothing that does not validate.
 
 Output: diagnostics — one line per finding, §7.8 — go to standard output for
-``validate`` and ``gate``; Markdown goes to standard output for ``report`` and
-``idea-gate``. Warnings that are not the command's product, environment errors and
-summaries go to standard error, so the standard output of every command can be piped as
-it is.
+``validate`` and ``gate``; Markdown for ``report`` and ``idea-gate``; one line per
+recorded finding for ``lookup``. Warnings that are not the command's product, environment
+errors and summaries go to standard error, so the standard output of every command can be
+piped as it is.
 """
 
 from __future__ import annotations
@@ -42,7 +42,16 @@ from portfolio_ops.loading import (
     parse_date,
     read_config,
 )
-from portfolio_ops.model import ALL, FILE_ORDER, PRODUCTS_FILE, Diagnostic, Portfolio, Product
+from portfolio_ops.model import (
+    ALL,
+    FILE_ORDER,
+    FINDINGS_FILE,
+    PORTFOLIO,
+    PRODUCTS_FILE,
+    Diagnostic,
+    Portfolio,
+    Product,
+)
 from portfolio_ops.report import ReportInput
 from portfolio_ops.report.overlap import render_idea_gate
 from portfolio_ops.report.publish import publish
@@ -50,6 +59,7 @@ from portfolio_ops.report.render import render, render_invalid
 from portfolio_ops.rules import CATALOGUE, validate
 from portfolio_ops.rules.changes import check_changes
 from portfolio_ops.rules.gates import gate, idea_gate, run_gate, run_idea_gate
+from portfolio_ops.rules.memory import lookup
 
 
 class _Parser(argparse.ArgumentParser):
@@ -91,7 +101,7 @@ def build_parser(out: IO[str], err: IO[str]) -> argparse.ArgumentParser:
     )
     parser.add_argument("--version", action="version", version=f"portfolio-ops {__version__}")
     commands = parser.add_subparsers(
-        dest="command", required=True, metavar="{validate,report,gate,idea-gate}"
+        dest="command", required=True, metavar="{validate,report,gate,idea-gate,lookup}"
     )
     path_help = "the data directory (default: the root of the git repository, else '.')"
     check = commands.add_parser(
@@ -166,6 +176,27 @@ def build_parser(out: IO[str], err: IO[str]) -> argparse.ArgumentParser:
     )
     idea.add_argument("idea", metavar="IDEA", help="the id of a product whose status is idea")
     idea.add_argument("--path", metavar="DIR", help=path_help)
+    memory = commands.add_parser(
+        "lookup",
+        help="look up what was already verified before checking again",
+        description=(
+            "List the findings about a subject of one type: reuse one that holds, check an "
+            "expired one again and update it, or record a new one."
+        ),
+        out=out,
+        err=err,
+    )
+    memory.add_argument("subject", metavar="SUBJECT", help="a product id, a kernel id or portfolio")
+    memory.add_argument(
+        "type", metavar="TYPE", help="claim, or one of vocabularies.finding_types in config.yaml"
+    )
+    memory.add_argument("--path", metavar="DIR", help=path_help)
+    memory.add_argument(
+        "--today",
+        metavar="YYYY-MM-DD",
+        type=_date,
+        help="the date the finding must hold on (default: today, UTC)",
+    )
     return parser
 
 
@@ -218,6 +249,7 @@ def main(
         "report": _report,
         "gate": _gate,
         "idea-gate": _idea_gate,
+        "lookup": _lookup,
     }
     try:
         return commands[args.command](args, context)
@@ -476,3 +508,62 @@ def _idea_gate(args: argparse.Namespace, context: _Context) -> int:
     verdict = "failed" if failures else "passed"
     context.err.write(f"portfolio-ops idea-gate {idea.id}: {verdict} — {shared}\n")
     return EXIT_VIOLATIONS if failures else EXIT_OK
+
+
+# --------------------------------------------------------------------------- memory
+
+
+def _lookup(args: argparse.Namespace, context: _Context) -> int:
+    today: dt.date = args.today or context.today()
+    checked = _validated(args, context, today)
+    if checked is None:
+        return EXIT_VIOLATIONS
+    data, portfolio = checked
+    subject, kind = args.subject, args.type
+    known = subject == PORTFOLIO or portfolio.product(subject) or portfolio.kernel(subject)
+    if not known:
+        raise EnvironmentProblem(
+            f"'{subject}' is not a product, a kernel or portfolio — look up the subject a "
+            "finding would record"
+        )
+    types = portfolio.config.finding_types
+    if kind not in types:
+        raise EnvironmentProblem(
+            f"'{kind}' is not a finding type — use one of: {', '.join(types)} (claim is built "
+            "in; the others come from vocabularies.finding_types in config.yaml)"
+        )
+    found = lookup(portfolio, subject, kind)
+    place = data.describe(FINDINGS_FILE)
+    for item in found:
+        finding = item.finding
+        where = f"{place}:{finding.loc.line}"
+        if item.holds(today):
+            result = " ".join((finding.result or "").split())
+            context.out.write(
+                f"reuse {where}: finding '{finding.id}' holds until {item.until} — {result}\n"
+            )
+        else:
+            fields = (
+                "result, checked_on and expires_on"
+                if "expires_on" in finding.present
+                else "result and checked_on"
+            )
+            context.out.write(
+                f"re-check {where}: finding '{finding.id}' held until {item.until} — check it "
+                f"again, then update its {fields}\n"
+            )
+    if not found:
+        about = "the portfolio" if subject == PORTFOLIO else subject
+        context.out.write(
+            f"check: no finding records a {kind} about {about} — check it, then record the "
+            f"result in {FINDINGS_FILE}\n"
+        )
+    holding = sum(1 for item in found if item.holds(today))
+    if holding:
+        verdict = f"{_count(holding, 'finding')} {'holds' if holding == 1 else 'hold'}"
+    elif found:
+        verdict = f"nothing holds; {_count(len(found), 'finding')} expired"
+    else:
+        verdict = "nothing is recorded yet"
+    context.err.write(f"portfolio-ops lookup {subject} {kind}: {verdict}\n")
+    return EXIT_OK
