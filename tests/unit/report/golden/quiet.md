@@ -14,6 +14,22 @@ No escalations.
 
 No overdue reviews.
 
+## Expired acceptances
+
+No expired acceptances.
+
+## Expired claims
+
+No expired claims.
+
+## Copy-paste debt
+
+No copy-paste debt: no product carries a copy of a kernel.
+
+## Changes without a decision
+
+Every status and state change since 2026-09-15 has its decision.
+
 ## Focus
 
 - This week: Alpha (`alpha`), recorded 2026-09-21.
@@ -25,4 +41,5 @@ No overdue reviews.
 - Median clock of active products: 12 days
 - Stale products: 0
 - Focus completion: 0 of the last 1 evaluated focus decisions done
+- Kernels: 0 done, 1 extracted, 0 planned
 - Last commit touching the data: 2026-09-20

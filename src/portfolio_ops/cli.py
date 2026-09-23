@@ -346,6 +346,7 @@ def _report(args: argparse.Namespace, context: _Context) -> int:
                 clocks=clocks(portfolio, history, today),
                 next_action_since=history.next_action_since,
                 last_data_commit=history.last_data_commit,
+                changes=history.changes,
             )
         )
     context.out.write(rendered.markdown)

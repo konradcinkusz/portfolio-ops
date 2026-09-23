@@ -7,25 +7,47 @@ the diff like any other change.
 
 from __future__ import annotations
 
+import datetime as dt
 import re
 from collections.abc import Callable
 
 import pytest
 
 from helpers import FIXTURES, TODAY
-from portfolio_ops.model import Diagnostic
+from portfolio_ops.model import Change, Diagnostic
 from portfolio_ops.report import ReportInput
 from portfolio_ops.report.render import render, render_invalid
 
 Build = Callable[..., ReportInput]
 Golden = Callable[[str, str], None]
 PRODUCTS = (FIXTURES / "valid" / "products.yaml").read_text()
-SECTION_ORDER = ["Stale", "Escalations", "Overdue reviews", "Focus", "Health"]
+SECTION_ORDER = [
+    "Stale",
+    "Escalations",
+    "Overdue reviews",
+    "Expired acceptances",
+    "Expired claims",
+    "Copy-paste debt",
+    "Changes without a decision",
+    "Focus",
+    "Health",
+]
 
 BUSY_PRODUCTS = PRODUCTS.replace(
     "    status: idea\n    capabilities: [maps]",
     "    status: active\n    next_action: Sketch the map | legend\n    capabilities: [maps]",
-).replace("review_by: 2026-10-01", "review_by: 2026-09-01")
+).replace(
+    "review_by: 2026-10-01",
+    "review_by: 2026-09-01\n    feeds_from:\n      - kernel: core\n        mode: copy",
+)
+BUSY_RISKS = (FIXTURES / "valid" / "risks.yaml").read_text().replace("2026-12-31", "2026-09-01")
+BUSY_FINDINGS = (
+    (FIXTURES / "valid" / "findings.yaml").read_text().replace("2026-12-01", "2026-09-15")
+)
+BUSY_CHANGES = (
+    Change("product", "beta", "active", "paused", dt.date(2026, 9, 20), "a" * 40),
+    Change("product", "omega", "active", "archived", dt.date(2026, 7, 1), "b" * 40),
+)
 BUSY_DECISIONS = (
     "## 2026-07-01 · omega · status_change\nArchived.\n\n"
     "## 2026-08-03 · beta · status_change\nPaused.\n\n"
@@ -37,11 +59,18 @@ BUSY_DECISIONS = (
 
 @pytest.fixture
 def busy(build: Build) -> ReportInput:
-    """Every section has something: stale, escalated, overdue, and no focus this week."""
+    """Every section has something: stale, escalated, overdue, an acceptance and a claim
+    past their dates, a copied kernel, a change without its decision, no focus this week."""
     return build(
-        {"products.yaml": BUSY_PRODUCTS, "decisions.md": BUSY_DECISIONS},
+        {
+            "products.yaml": BUSY_PRODUCTS,
+            "risks.yaml": BUSY_RISKS,
+            "findings.yaml": BUSY_FINDINGS,
+            "decisions.md": BUSY_DECISIONS,
+        },
         clocks={"alpha": "2026-09-12", "delta": "2026-07-01"},
         changed={"alpha": "2026-08-20"},
+        changes=BUSY_CHANGES,
     )
 
 

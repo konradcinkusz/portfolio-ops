@@ -195,6 +195,10 @@ def test_report_with_a_fixed_date_is_deterministic(data_repo: GitRepo) -> None:
         "Stale",
         "Escalations",
         "Overdue reviews",
+        "Expired acceptances",
+        "Expired claims",
+        "Copy-paste debt",
+        "Changes without a decision",
         "Focus",
         "Health",
     ]

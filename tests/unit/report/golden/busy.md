@@ -20,6 +20,46 @@ Active products whose clock is past stale_days (30):
 |---|---|---|
 | Beta (`beta`) | paused | 2026-09-01 |
 
+## Expired acceptances
+
+Accepted risks whose acceptance has ended; they count as open again:
+
+| Risk | Scope | Severity | Accepted until |
+|---|---|---|---|
+| Two offline edits can overwrite each other (`core-data-loss`) | Core (`core`) | high | 2026-09-01 |
+
+Renew each acceptance with a later accepted_until and a risk_accepted decision, or mitigate the risk or close it.
+
+## Expired claims
+
+Claims that no longer hold; verify each again before it is used:
+
+| Claim | About | Used in | Held until |
+|---|---|---|---|
+| Syncs a change in under a second on a phone (`alpha-sync-claim`) | Alpha (`alpha`) | website | 2026-09-15 |
+
+Once a claim is verified again, update its checked_on and expires_on.
+
+## Copy-paste debt
+
+Products that carry a copy of a kernel instead of using it as a package:
+
+| Product | Kernel | Kernel state |
+|---|---|---|
+| Beta (`beta`) | Core (`core`) | extracted, 1 of 2 package consumers |
+
+Switch each copy to the package: a kernel is done when enough products use it as one.
+
+## Changes without a decision
+
+Status and state changes since 2026-09-15 that decisions.md does not record, or that the product lifecycle does not have:
+
+```text
+warning P1 products.yaml:13: product 'beta' changed status from active to paused on 2026-09-20, and no decision names it on that day — record the decision in decisions.md as '## 2026-09-20 · beta · status_change'
+```
+
+A decision records a change when it names the id and carries the change's date; a decision may be dated in the past.
+
 ## Focus
 
 - **No focus recorded this week.** Record one in decisions.md as `## 2026-09-22 · <product> · focus`.
@@ -31,4 +71,5 @@ Active products whose clock is past stale_days (30):
 - Median clock of active products: 46.5 days
 - Stale products: 1
 - Focus completion: 0 of the last 1 evaluated focus decisions done
+- Kernels: 0 done, 1 extracted, 0 planned
 - Last commit touching the data: 2026-09-20

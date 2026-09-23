@@ -286,3 +286,22 @@ def test_validate_on_a_shallow_clone_says_p1_was_not_checked(
         run.err
     )
     assert "fetch-depth: 0" in run.err
+
+
+def test_the_report_lists_the_changes_of_its_week_without_a_decision(valid_repo: GitRepo) -> None:
+    data = _pause_to_dormant(valid_repo)  # committed on 2026-09-20
+    miss = (
+        "warning P1 products.yaml:13: product 'beta' changed status from paused to dormant on "
+        "2026-09-20, and no decision names it on that day"
+    )
+
+    this_week = run_cli(["report", "--path", str(data), "--today", "2026-09-22"])
+    a_week_later = run_cli(["report", "--path", str(data), "--today", "2026-09-28"])
+
+    assert this_week.code == 0, this_week.err
+    assert miss in this_week.out
+    assert a_week_later.code == 0, a_week_later.err
+    assert miss not in a_week_later.out
+    assert "Every status and state change since 2026-09-21 has its decision." in (
+        a_week_later.lines
+    )

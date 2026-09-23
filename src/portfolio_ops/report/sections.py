@@ -1,6 +1,8 @@
 """The report sections of spec §7.4: Stale (N2), Escalations (N3), Overdue reviews (N4),
-Focus (R3) and Health. Section 1, Validation errors, is rendered by render.py because it
-replaces the others rather than preceding them.
+the four that R2 adds in phase 2 — Expired acceptances (B3), Expired claims (P2),
+Copy-paste debt (K2) and Changes without a decision (P1) — then Focus (R3) and Health.
+Section 1, Validation errors, is rendered by render.py because it replaces the others
+rather than preceding them.
 """
 
 from __future__ import annotations
@@ -10,12 +12,15 @@ import re
 import statistics
 from collections.abc import Iterator
 
-from portfolio_ops.model import Decision, Product
+from portfolio_ops.model import PORTFOLIO, Decision, Product
 from portfolio_ops.report import ReportInput, Section, section
+from portfolio_ops.rules.changes import check_changes
+from portfolio_ops.rules.kernels import copies, kernel_state
 
 NO_FOCUS = "No focus recorded this week"
 FOCUS_WINDOW_DAYS = 7  # "the seven days ending today"
 EVALUATED_FOCUS_COUNT = 4
+CHANGES_WINDOW_DAYS = 7  # P1: from the same weekday last week up to today (ADR 0005)
 
 _SPECIAL = re.compile(r"([\\`*_\[\]<>|#])")
 
@@ -34,6 +39,17 @@ def entity_label(name: str | None, entity_id: str) -> str:
 
 def product_label(product: Product | None, product_id: str) -> str:
     return entity_label(product.name if product else None, product_id)
+
+
+def scope_label(data: ReportInput, scope: str | None) -> str:
+    """A product, a kernel or the portfolio, as a risk's scope or a finding's subject."""
+    if scope is None or scope == PORTFOLIO:
+        return "the portfolio"
+    product = data.portfolio.product(scope)
+    if product is not None:
+        return product_label(product, scope)
+    kernel = data.portfolio.kernel(scope)
+    return entity_label(kernel.name if kernel else None, scope)
 
 
 def _days(count: int) -> str:
@@ -112,6 +128,127 @@ def overdue_reviews(data: ReportInput) -> Section:
     return Section("Overdue reviews", tuple(lines), True)
 
 
+@section(5)
+def expired_acceptances(data: ReportInput) -> Section:
+    """B3: an accepted risk past its accepted_until counts as open again."""
+    expired = sorted(
+        (
+            risk
+            for risk in data.portfolio.risks
+            if risk.state == "accepted" and not risk.acceptance_holds(data.today)
+        ),
+        key=lambda risk: (risk.accepted_until or dt.date.min, risk.id or ""),
+    )
+    if not expired:
+        return Section("Expired acceptances", ("No expired acceptances.",), False)
+    lines = [
+        "Accepted risks whose acceptance has ended; they count as open again:",
+        "",
+        "| Risk | Scope | Severity | Accepted until |",
+        "|---|---|---|---|",
+    ]
+    lines += [
+        f"| {entity_label(risk.title, risk.id or '')} | {scope_label(data, risk.scope)} | "
+        f"{risk.severity} | {risk.accepted_until} |"
+        for risk in expired
+    ]
+    lines += [
+        "",
+        (
+            "Renew each acceptance with a later accepted_until and a risk_accepted decision, "
+            "or mitigate the risk or close it."
+        ),
+    ]
+    return Section("Expired acceptances", tuple(lines), True)
+
+
+@section(6)
+def expired_claims(data: ReportInput) -> Section:
+    """Claims past their expiry (P2): each must be verified again before its next use (B4)."""
+    config = data.portfolio.config
+    expired = []
+    for finding in data.portfolio.findings:
+        until = config.expiry(finding)
+        if finding.type == "claim" and until is not None and until < data.today:
+            expired.append((until, finding))
+    if not expired:
+        return Section("Expired claims", ("No expired claims.",), False)
+    lines = [
+        "Claims that no longer hold; verify each again before it is used:",
+        "",
+        "| Claim | About | Used in | Held until |",
+        "|---|---|---|---|",
+    ]
+    for until, claim in sorted(expired, key=lambda pair: (pair[0], pair[1].id or "")):
+        used = ", ".join(term.value for term in claim.used_in or ())
+        lines.append(
+            f"| {entity_label(claim.result, claim.id or '')} | {scope_label(data, claim.subject)} "
+            f"| {escape(used)} | {until} |"
+        )
+    lines += ["", "Once a claim is verified again, update its checked_on and expires_on."]
+    return Section("Expired claims", tuple(lines), True)
+
+
+@section(7)
+def copy_paste_debt(data: ReportInput) -> Section:
+    """K2: a product consumes a kernel in copy mode; K1 says how far that kernel is."""
+    debts = copies(data.portfolio)
+    if not debts:
+        return Section(
+            "Copy-paste debt",
+            ("No copy-paste debt: no product carries a copy of a kernel.",),
+            False,
+        )
+    lines = [
+        "Products that carry a copy of a kernel instead of using it as a package:",
+        "",
+        "| Product | Kernel | Kernel state |",
+        "|---|---|---|",
+    ]
+    lines += [
+        f"| {product_label(product, product.id or '')} | "
+        f"{entity_label(kernel.name, kernel.id or '')} | "
+        f"{kernel_state(data.portfolio, kernel).summary} |"
+        for product, kernel in debts
+    ]
+    lines += [
+        "",
+        "Switch each copy to the package: a kernel is done when enough products use it as one.",
+    ]
+    return Section("Copy-paste debt", tuple(lines), True)
+
+
+@section(8)
+def changes_without_decision(data: ReportInput) -> Section:
+    """P1: the status and state changes since the same weekday last week that no decision
+    records, and the ones the product lifecycle does not have (ADR 0005)."""
+    start = data.today - dt.timedelta(days=CHANGES_WINDOW_DAYS)
+    recent = [change for change in data.changes if start <= change.date <= data.today]
+    warnings = list(check_changes(data.portfolio, recent))
+    if not warnings:
+        return Section(
+            "Changes without a decision",
+            (f"Every status and state change since {start} has its decision.",),
+            False,
+        )
+    lines = [
+        (
+            f"Status and state changes since {start} that decisions.md does not record, or "
+            "that the product lifecycle does not have:"
+        ),
+        "",
+        "```text",
+        *(warning.render() for warning in warnings),
+        "```",
+        "",
+        (
+            "A decision records a change when it names the id and carries the change's date; "
+            "a decision may be dated in the past."
+        ),
+    ]
+    return Section("Changes without a decision", tuple(lines), True)
+
+
 def _focus_decisions(data: ReportInput) -> list[Decision]:
     """Parsed focus decisions, latest first; the later heading wins on the same day."""
     focus = [
@@ -143,7 +280,7 @@ def _evaluated(data: ReportInput) -> Iterator[tuple[Decision, str]]:
             yield decision, evaluate_focus(data, decision)
 
 
-@section(5)
+@section(9)
 def focus(data: ReportInput) -> Section:
     """R3: this week's focus, and last week's evaluated."""
     start = _window_start(data.today)
@@ -172,7 +309,7 @@ def focus(data: ReportInput) -> Section:
     return Section("Focus", tuple(lines), this_week is None)
 
 
-@section(6)
+@section(10)
 def health(data: ReportInput) -> Section:
     """The measures of spec §10. Not items: they never make the report 'have items'."""
     thresholds = data.portfolio.config.thresholds
@@ -187,11 +324,18 @@ def health(data: ReportInput) -> Section:
     else:
         completion = "no focus decision old enough to evaluate yet"
     last_commit = str(data.last_data_commit) if data.last_data_commit else "no commit yet"
+    states = [kernel_state(data.portfolio, kernel).state for kernel in data.portfolio.kernels]
+    kernels = (
+        ", ".join(f"{states.count(state)} {state}" for state in ("done", "extracted", "planned"))
+        if states
+        else "none registered"
+    )
     lines = (
         f"- Active products: {active} of wip_limit {thresholds.wip_limit}",
         f"- Median clock of active products: {median}",
         f"- Stale products: {stale_count}",
         f"- Focus completion: {completion}",
+        f"- Kernels: {kernels}",
         f"- Last commit touching the data: {last_commit}",
     )
     return Section("Health", lines, False)

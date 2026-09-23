@@ -9,4 +9,4 @@ error S4 data/products.yaml:14: product 'alpha' is active but has no next_action
 error S2 data/risks.yaml:3: risk 'r1' has scope 'ghost', which is not…
 ```
 
-Stale, Escalations, Overdue reviews, Focus and Health are left out until the data validates.
+The other sections are left out until the data validates.

@@ -1,4 +1,6 @@
-"""The sections of §7.4: Stale (N2), Escalations (N3), Overdue reviews (N4), Focus (R3), Health."""
+"""The sections of §7.4: Stale (N2), Escalations (N3), Overdue reviews (N4), the four that
+R2 adds in phase 2 — Expired acceptances, Expired claims, Copy-paste debt (K2), Changes
+without a decision (P1) — Focus (R3) and Health."""
 
 from __future__ import annotations
 
@@ -8,6 +10,7 @@ from collections.abc import Callable
 import pytest
 
 from helpers import FIXTURES
+from portfolio_ops.model import Change
 from portfolio_ops.report import ReportInput, sections, title, week_start
 from portfolio_ops.report.render import render
 
@@ -206,6 +209,7 @@ def test_health_reports_the_measures_of_section_10(build: Build) -> None:
         "- Median clock of active products: 32 days",
         "- Stale products: 1",
         "- Focus completion: 3 of the last 4 evaluated focus decisions done",
+        "- Kernels: 0 done, 1 extracted, 0 planned",
         "- Last commit touching the data: 2026-09-20",
     )
 
@@ -224,15 +228,125 @@ def test_health_without_active_products_or_commits(build: Build) -> None:
     assert "- Last commit touching the data: no commit yet" in lines
 
 
+# ------------------------------------------------------------------ phase 2: B3, P2, K2, P1
+
+RISKS = (FIXTURES / "valid" / "risks.yaml").read_text()
+FINDINGS = (FIXTURES / "valid" / "findings.yaml").read_text()
+
+
+def test_an_acceptance_that_has_ended_is_listed_as_open_again(build: Build) -> None:
+    data = build({"risks.yaml": RISKS.replace("2026-12-31", "2026-09-21")})
+
+    expired = sections.expired_acceptances(data)
+
+    assert expired.has_items
+    assert (
+        "| Two offline edits can overwrite each other (`core-data-loss`) | Core (`core`) | high "
+        "| 2026-09-21 |"
+    ) in expired.lines
+
+
+def test_an_acceptance_holds_through_its_last_day(build: Build) -> None:
+    data = build({"risks.yaml": RISKS.replace("2026-12-31", "2026-09-22")})
+
+    assert sections.expired_acceptances(data).lines == ("No expired acceptances.",)
+
+
+def test_a_claim_past_its_expiry_is_listed_and_other_findings_are_not(build: Build) -> None:
+    # delta-name (a name_check, TTL 90) expired too, but only claims are listed here.
+    findings = FINDINGS.replace("2026-12-01", "2026-09-21").replace("2026-09-10", "2026-06-01")
+    claims = sections.expired_claims(build({"findings.yaml": findings}))
+
+    assert claims.has_items
+    rows = [line for line in claims.lines if line.startswith("| ") and "`" in line]
+    assert rows == [
+        (
+            "| Syncs a change in under a second on a phone (`alpha-sync-claim`) | Alpha "
+            "(`alpha`) | website | 2026-09-21 |"
+        )
+    ]
+
+
+def test_a_claim_holds_through_its_last_day(build: Build) -> None:
+    data = build({"findings.yaml": FINDINGS.replace("2026-12-01", "2026-09-22")})
+
+    assert sections.expired_claims(data).lines == ("No expired claims.",)
+
+
+def test_k2_a_product_that_copies_a_kernel_is_copy_paste_debt(build: Build) -> None:
+    products = PRODUCTS.replace(
+        "    review_by: 2026-10-01\n",
+        "    review_by: 2026-10-01\n    feeds_from:\n      - kernel: core\n        mode: copy\n",
+    )
+    debt = sections.copy_paste_debt(build({"products.yaml": products}))
+
+    assert debt.has_items
+    assert "| Beta (`beta`) | Core (`core`) | extracted, 1 of 2 package consumers |" in debt.lines
+
+
+def test_k2_without_copies_there_is_no_debt(build: Build) -> None:
+    debt = sections.copy_paste_debt(build())
+
+    assert debt.lines == ("No copy-paste debt: no product carries a copy of a kernel.",)
+    assert not debt.has_items
+
+
+def change(ident: str, before: str, after: str, day: str) -> Change:
+    return Change("product", ident, before, after, dt.date.fromisoformat(day), "c" * 40)
+
+
+def test_p1_lists_the_changes_since_the_same_weekday_last_week(build: Build) -> None:
+    data = build(
+        changes=(
+            change("gamma", "active", "dormant", "2026-09-14"),  # eight days ago: left out
+            change("gamma", "dormant", "active", "2026-09-15"),  # seven days ago: listed
+            change("beta", "active", "paused", "2026-09-22"),  # today: listed
+        )
+    )
+
+    section = sections.changes_without_decision(data)
+    listed = [line.split("'")[1] for line in section.lines if line.startswith("warning P1 ")]
+
+    assert section.has_items
+    assert section.lines[0].startswith("Status and state changes since 2026-09-15 ")
+    assert listed == ["gamma", "beta"]
+
+
+def test_p1_a_change_with_its_decision_is_not_listed(build: Build) -> None:
+    data = build(
+        decisions("## 2026-09-20 · beta · status_change"),
+        changes=(change("beta", "active", "paused", "2026-09-20"),),
+    )
+
+    section = sections.changes_without_decision(data)
+
+    assert not section.has_items
+    assert section.lines == ("Every status and state change since 2026-09-15 has its decision.",)
+
+
+def test_health_counts_the_kernels_by_state(build: Build) -> None:
+    kernels = "kernels:\n  - id: core\n    name: Core\n  - id: spare\n    name: Spare\n"
+
+    lines = sections.health(build({"kernels.yaml": kernels})).lines
+
+    assert "- Kernels: 0 done, 1 extracted, 1 planned" in lines
+
+
 # ------------------------------------------------------------------ the whole report
 
 
-def test_the_report_has_items_only_for_sections_1_to_4_or_a_missing_focus(build: Build) -> None:
-    quiet = build(decisions("## 2026-09-20 · alpha · focus"), clocks={"alpha": "2026-09-10"})
+def test_the_report_has_items_for_a_section_with_items_or_a_missing_focus(build: Build) -> None:
+    focus = decisions("## 2026-09-20 · alpha · focus")
+    quiet = build(focus, clocks={"alpha": "2026-09-10"})
     no_focus = build(decisions(), clocks={"alpha": "2026-09-10"})
+    expired = build(
+        focus | {"risks.yaml": RISKS.replace("2026-12-31", "2026-09-01")},
+        clocks={"alpha": "2026-09-10"},
+    )
 
     assert not render(quiet).has_items
     assert render(no_focus).has_items
+    assert render(expired).has_items
 
 
 def test_the_week_starts_on_monday() -> None:
