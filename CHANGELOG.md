@@ -6,27 +6,14 @@ Notable changes to portfolio-ops. The format follows
 (business rules §9.4), but a breaking change to the data format always increments
 `schema_version` and adds a note to [docs/migrations/](docs/migrations/README.md).
 
-To release, replace "Unreleased" with the date, then push the tag; the release workflow
-refuses an undated entry.
-
-## [Unreleased]
-
-### Changed
-
-- The [business rules](docs/business-rules.md) are at revision r2. It folds in what phases
-  1–3 decided where r1 was silent, and changes no behaviour:
-  - the whole command-line interface and the action's `dashboard` output (§7.6)
-  - the report's ten sections (§7.4)
-  - change coverage (§7.9), the gates and lookup (§7.10) and the views (§7.11)
-  - the dashboard job of the caller workflow (§3)
-  - clearer texts for B1, B5, B6, K1, K2 and P2
-- The README's caller workflow is r2's, with the dashboard job and the engine pinned by
-  commit SHA. Its install line and schema URL name v0.3.0, the first release with every
-  command the README shows.
+To release, replace "Unreleased" with the date, then create the tag, with git or in the
+GitHub portal (CONTRIBUTING.md, Releasing); the release workflow refuses an undated entry.
+0.3.0 is the first version published as a release. It includes 0.1.0 and 0.2.0, whose
+links point at the commits they describe.
 
 ## [0.3.0] — 2026-09-23
 
-Phase 3 of the [business rules](docs/business-rules.md), revision r1 (§9.3).
+Phase 3 of the [business rules](docs/business-rules.md) (§9.3), and their revision r2.
 
 ### Added
 
@@ -55,6 +42,17 @@ Phase 3 of the [business rules](docs/business-rules.md), revision r1 (§9.3).
 
 - Each decision keeps the text under its heading, which both views show.
 - ADRs 0005 and 0006 are accepted, with the merge of phase 2.
+- The [business rules](docs/business-rules.md) are at revision r2. It folds in what phases
+  1–3 decided where r1 was silent, and changes no behaviour:
+  - the whole command-line interface and the action's `dashboard` output (§7.6)
+  - the report's ten sections (§7.4)
+  - change coverage (§7.9), the gates and lookup (§7.10) and the views (§7.11)
+  - the dashboard job of the caller workflow (§3)
+  - clearer texts for B1, B5, B6, K1, K2 and P2
+- The README's caller workflow is r2's, with the dashboard job and the engine pinned by
+  commit SHA. Its install line and schema URL name v0.3.0.
+- A release can be published from the GitHub portal: the release workflow completes a
+  release that already exists instead of failing to create it again.
 
 ### Fixed
 
@@ -115,7 +113,6 @@ Phase 1 of the [business rules](docs/business-rules.md), revision r1 (§9.1).
   dependency audit, secret scan, action self-test), CodeQL, a tag-driven release workflow,
   Dependabot, templates and ADRs 0001–0004.
 
-[Unreleased]: https://github.com/konradcinkusz/portfolio-ops/compare/v0.3.0...HEAD
 [0.3.0]: https://github.com/konradcinkusz/portfolio-ops/releases/tag/v0.3.0
-[0.2.0]: https://github.com/konradcinkusz/portfolio-ops/releases/tag/v0.2.0
-[0.1.0]: https://github.com/konradcinkusz/portfolio-ops/releases/tag/v0.1.0
+[0.2.0]: https://github.com/konradcinkusz/portfolio-ops/tree/7c55fb2
+[0.1.0]: https://github.com/konradcinkusz/portfolio-ops/tree/c8bd6e4

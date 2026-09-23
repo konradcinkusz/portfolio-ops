@@ -1,14 +1,18 @@
 name: Release
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Tag-driven releases (P12). Pushing a v* tag creates the GitHub Release; there is
-#  nothing to deploy. Callers pin the action to the tag or, better, to its commit SHA
+#  Tag-driven releases (P12). A new v* tag makes the GitHub Release; there is nothing
+#  to deploy. Callers pin the action to the tag or, better, to its commit SHA
 #  (business rules §3).
 #
-#    push tag vX.Y.Z
+#    tag vX.Y.Z — pushed with git, or created by publishing a release in the portal
 #      ├── the tag, pyproject.toml and a dated CHANGELOG.md entry agree
 #      ├── the one-command setup runs the full test suite on the tagged commit
-#      └── gh release create, with the CHANGELOG entry as the release notes
+#      └── the release gets the CHANGELOG entry as its title and notes: created here,
+#          or, when the portal already published it with the tag, edited in place
+#
+#  A tag runs the workflow file of the commit it points at, so a release tags a commit
+#  that carries this version of the file.
 #
 #  No third-party release action: the gh CLI on the runner does it with the
 #  workflow's own token.
@@ -70,12 +74,17 @@ jobs:
       - name: The full test suite passes on the tagged commit
         run: python scripts/setup.py
 
-      - name: Create the GitHub Release
+      - name: Create the GitHub Release, or complete the one the portal published
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh release create "$GITHUB_REF_NAME"
-          --repo "$GITHUB_REPOSITORY"
-          --title "portfolio-ops $GITHUB_REF_NAME"
-          --notes-file "$RUNNER_TEMP/notes.md"
-          --verify-tag
+        run: |
+          set -euo pipefail
+          title="portfolio-ops $GITHUB_REF_NAME"
+          notes="$RUNNER_TEMP/notes.md"
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+              --title "$title" --notes-file "$notes"
+          else
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+              --title "$title" --notes-file "$notes" --verify-tag
+          fi

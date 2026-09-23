@@ -121,11 +121,17 @@ Releases are tag-driven (P12) and only the owner tags.
 
 1. Set the version in `pyproject.toml`.
 2. In CHANGELOG.md, replace "Unreleased" in that version's heading with today's date.
-3. Merge, then tag the merge commit `vX.Y.Z` and push the tag.
+3. Merge, then tag the merge commit `vX.Y.Z`, in either way:
+   - **In the GitHub portal:** Releases → Draft a new release → Choose a tag: type
+     `vX.Y.Z` and choose "Create new tag on publish" → Target: `main` → Publish release.
+     Leave the title and notes empty: the release workflow fills them in.
+   - **With git:** `git tag vX.Y.Z <merge commit> && git push origin vX.Y.Z`.
 
-The release workflow checks that the tag, `pyproject.toml` and a dated CHANGELOG entry
-agree, runs the tests on the tagged commit, and creates the GitHub Release with the
-CHANGELOG entry as its notes.
+The release workflow runs on the new tag. It checks that the tag, `pyproject.toml` and a
+dated CHANGELOG entry agree, runs the tests on the tagged commit, and gives the release the
+CHANGELOG entry as its notes. A release published in the portal exists before those checks
+run: if the workflow fails, delete the release and its tag, fix the cause, and publish
+again.
 
 ## Standards
 
