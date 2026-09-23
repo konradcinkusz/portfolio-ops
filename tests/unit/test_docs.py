@@ -150,11 +150,11 @@ def test_the_standards_marketplace_is_declared() -> None:
 
 # ------------------------------------------------------------------ the specification (AC12)
 
-# SHA-256 of docs/business-rules.md, revision r1, as committed. The spec changes only by a
+# SHA-256 of docs/business-rules.md, revision r2, as committed. The spec changes only by a
 # new revision; implementation may change nothing but the Status and Entry point columns
 # of §6. A new revision updates these two constants in the same commit.
-SPEC_REVISION = "r1"
-SPEC_SHA256 = "885b90ba625f55586ed4f5cf9e6c9067dae75a52e8d2f157a19fd1a07632e498"
+SPEC_REVISION = "r2"
+SPEC_SHA256 = "951bca85c8db2a3240b7c1acbd2ffc69fbad847848fcf1e4685e4a948916f93d"
 CATALOGUE_ROW = re.compile(r"^\| [A-Z][0-9] \|")
 
 
