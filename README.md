@@ -15,8 +15,9 @@
 portfolio-ops checks the files that describe one person's portfolio of side projects, and
 keeps a single weekly-review issue in that person's private repository up to date. It
 exists because the only real limit on a pile of side projects is its owner's attention: it
-caps how many projects are in progress, flags the ones that have stopped moving, and
-remembers what was decided and verified, so none of that depends on willpower.
+caps how many projects are in progress, flags the ones that have stopped moving, gates
+external moves and new ideas on what is already known, and remembers what was decided and
+verified, so none of that depends on willpower.
 
 It is a command line and a GitHub Action. Your data — a few YAML files and a Markdown
 decision log — stays in a private repository of your own; this repository holds only the
@@ -101,6 +102,9 @@ jobs:
 Pin the action to a release tag or, better, to that tag's full commit SHA. The repository
 name is part of the contract: GitHub does not redirect renamed action repositories.
 
+The action runs `validate` and `report`. The gates and `lookup` are for the moment you are
+about to act — run them in a clone of your data repository.
+
 ### Action inputs
 
 | Input | Default | What it does |
@@ -139,16 +143,33 @@ VS Code, for example, put this on the first line of `products.yaml`:
 ```
 portfolio-ops validate [--path DIR]
 portfolio-ops report [--path DIR] [--today YYYY-MM-DD] [--publish] [--dry-run] [--repo OWNER/NAME]
+portfolio-ops gate PRODUCT --context CONTEXT [--path DIR] [--today YYYY-MM-DD]
+portfolio-ops idea-gate IDEA [--path DIR]
+portfolio-ops lookup SUBJECT TYPE [--path DIR] [--today YYYY-MM-DD]
 portfolio-ops --version
 ```
 
 - **`validate`** checks the data against the rules and prints one line per finding, such
   as `error S4 products.yaml:14: product 'alpha' is active but has no next_action — add
-  next_action or change its status`. It needs no git history.
+  next_action or change its status`. In a git repository it also warns about a product's
+  status or a risk's state that changed since the previous commit without a decision
+  dated that day; it needs no history otherwise, and works outside a repository.
 - **`report`** prints the weekly review as Markdown: Stale, Escalations, Overdue reviews,
-  Focus and Health. It reads how long each active product has stood still from git
-  history, so it needs a full clone. `--today` fixes the date, which makes the output
-  reproducible.
+  Expired acceptances, Expired claims, Copy-paste debt, Changes without a decision, Focus
+  and Health. It reads how long each active product has stood still, and what changed
+  this week, from git history, so it needs a full clone. `--today` fixes the date, which
+  makes the output reproducible.
+- **`gate`** asks whether an external move — a store listing, a grant application, a
+  talk — may go ahead. It collects the risks of the product, of every kernel it feeds
+  from and of the portfolio that apply to the context, and fails on an open high or
+  critical risk, or on an expired claim used in that context; an acceptance that still
+  holds is a warning. `portfolio-ops gate tidewatch --context app-store --path
+  examples/starter` fails on an open licence risk.
+- **`idea-gate`** compares an idea with what exists: it lists the products and kernels that
+  share its capabilities, and fails while one product has half of them — until an
+  `admit` decision names the idea and says why it stands apart.
+- **`lookup`** answers "was this already verified?" before a new check: reuse a finding
+  that holds, check an expired one again and update it, or record a new one.
 - **`report --publish`** keeps one open issue labelled `weekly-review` current: it creates,
   updates or closes it. It needs `GITHUB_TOKEN`, and the repository from `--repo` or
   `GITHUB_REPOSITORY`. **`--dry-run`** prints the planned action instead and sends no write
@@ -157,7 +178,7 @@ portfolio-ops --version
 | Exit code | Meaning |
 |---|---|
 | 0 | Success; warnings allowed |
-| 1 | Rule violations |
+| 1 | Rule violations, or a failed gate |
 | 2 | Usage or environment problem: unsupported `schema_version`, a shallow clone, a missing token, visibility that cannot be determined in CI |
 | 3 | Refused: the data repository is public and `allow_public: true` is not set |
 

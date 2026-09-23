@@ -3,6 +3,8 @@
 - **Status:** accepted, 2026-09-22
 - **Decided by:** the repository owner — business rules §7.2 and §8.2
 - **Governs:** `src/portfolio_ops/history.py`, `src/portfolio_ops/git.py` (rule N1)
+- **Amended by:** [ADR 0005](0005-change-coverage.md) — `validate` also reads what changed
+  since the previous commit, for rule P1, when there is a repository to read
 
 ## Context
 

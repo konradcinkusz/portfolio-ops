@@ -178,41 +178,32 @@ def test_implementation_changed_nothing_in_the_spec_but_status_and_entry_point()
     assert digest == SPEC_SHA256
 
 
-def test_every_phase_1_rule_is_implemented_and_its_entry_point_exists() -> None:
+def _released_in(row: list[str]) -> str:
+    """Phase n is released as v0.n.0, and a rule of several phases with the last of them."""
+    return f"implemented (v0.{max(int(phase) for phase in row[4].split(', '))}.0)"
+
+
+def _delivered(row: list[str]) -> bool:
+    return set(row[4].split(", ")) <= {"1", "2"}
+
+
+def test_every_rule_of_phases_1_and_2_is_implemented_and_its_entry_point_exists() -> None:
     import importlib
 
-    phase_1 = [row for row in _catalogue_rows() if "1" in row[4].split(", ")]
+    delivered = [row for row in _catalogue_rows() if _delivered(row)]
 
-    assert [row[0][2:] for row in phase_1] == (
-        [
-            "S1",
-            "S2",
-            "S3",
-            "S4",
-            "S5",
-            "S6",
-            "S7",
-            "L1",
-            "L2",
-            "N1",
-            "N2",
-            "N3",
-            "N4",
-            "P2",
-            "R1",
-            "R2",
-            "R3",
-        ]
-    )
-    for row in phase_1:
-        assert row[5] == "implemented (v0.1.0)", row[0]
+    phase_1 = ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "L1", "L2", "N1", "N2", "N3", "N4", "P2"]
+    phase_2 = ["B1", "B2", "B3", "B4", "B5", "B6", "K1", "K2", "P1", "P3"]
+    assert [row[0][2:] for row in delivered] == [*phase_1, "R1", "R2", "R3", *phase_2]
+    for row in delivered:
+        assert row[5] == _released_in(row), row[0]
         dotted = row[6].removesuffix(" |").strip("`")
         module, _, name = dotted.rpartition(".")
         assert callable(getattr(importlib.import_module(module), name)), dotted
 
 
 def test_rules_of_later_phases_stay_planned() -> None:
-    later = [row for row in _catalogue_rows() if "1" not in row[4].split(", ")]
+    later = [row for row in _catalogue_rows() if not _delivered(row)]
 
-    assert later
+    assert [row[0][2:] for row in later] == ["V1", "V2"]
     assert all(row[5] == "planned" and row[6] == "— |" for row in later)

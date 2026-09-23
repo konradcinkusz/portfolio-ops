@@ -9,6 +9,35 @@ Notable changes to portfolio-ops. The format follows
 To release, replace "Unreleased" with the date, then push the tag; the release workflow
 refuses an undated entry.
 
+## [0.2.0] — Unreleased
+
+Phase 2 of the [business rules](docs/business-rules.md), revision r1 (§9.2).
+
+### Added
+
+- `portfolio-ops gate PRODUCT --context CONTEXT`: may an external move go ahead? It
+  collects the risks of the product, of every kernel it feeds from and of the portfolio
+  that apply to the context (B1), fails on an open high or critical risk (B2) or on an
+  expired claim used there (B4), and warns about an acceptance that still holds (B3).
+- `portfolio-ops idea-gate IDEA`: the products and kernels that share an idea's
+  capabilities, as a Markdown report (B5); it fails while one product has half of them
+  and no `admit` decision names the idea (B6).
+- `portfolio-ops lookup SUBJECT TYPE`: reuse a finding that holds, check an expired one
+  again, or record a new one (P3).
+- P1: `validate` warns about a product's status or a risk's state that changed since the
+  previous commit without a decision dated that day, and about a transition the product
+  lifecycle (§5) does not have. It never changes the exit code.
+- Four report sections (R2): Expired acceptances, Expired claims, Copy-paste debt (K2,
+  with each kernel's derived state, K1) and Changes without a decision (P1). Health
+  counts the kernels by state.
+- ADRs 0005 (change coverage) and 0006 (the gates as commands).
+
+### Changed
+
+- The composite action fetches the full history for `validate` too, so P1 can compare
+  with the previous commit.
+- The report's note under validation errors no longer lists the other sections by name.
+
 ## [0.1.0] — 2026-09-23
 
 Phase 1 of the [business rules](docs/business-rules.md), revision r1 (§9.1).
@@ -34,4 +63,5 @@ Phase 1 of the [business rules](docs/business-rules.md), revision r1 (§9.1).
   dependency audit, secret scan, action self-test), CodeQL, a tag-driven release workflow,
   Dependabot, templates and ADRs 0001–0004.
 
+[0.2.0]: https://github.com/konradcinkusz/portfolio-ops/releases/tag/v0.2.0
 [0.1.0]: https://github.com/konradcinkusz/portfolio-ops/releases/tag/v0.1.0
