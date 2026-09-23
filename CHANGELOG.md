@@ -11,6 +11,14 @@ GitHub portal (CONTRIBUTING.md, Releasing); the release workflow refuses an unda
 0.3.0 is the first version published as a release. It includes 0.1.0 and 0.2.0, whose
 links point at the commits they describe.
 
+## [Unreleased]
+
+### Changed
+
+- The README sends a new data repository to
+  [portfolio-ops-template](https://github.com/konradcinkusz/portfolio-ops-template), which
+  now exists, instead of a hand-made copy of `examples/starter`.
+
 ## [0.3.0] — 2026-09-23
 
 Phase 3 of the [business rules](docs/business-rules.md) (§9.3), and their revision r2.
@@ -113,6 +121,7 @@ Phase 1 of the [business rules](docs/business-rules.md), revision r1 (§9.1).
   dependency audit, secret scan, action self-test), CodeQL, a tag-driven release workflow,
   Dependabot, templates and ADRs 0001–0004.
 
+[Unreleased]: https://github.com/konradcinkusz/portfolio-ops/compare/v0.3.0...HEAD
 [0.3.0]: https://github.com/konradcinkusz/portfolio-ops/releases/tag/v0.3.0
 [0.2.0]: https://github.com/konradcinkusz/portfolio-ops/tree/7c55fb2
 [0.1.0]: https://github.com/konradcinkusz/portfolio-ops/tree/c8bd6e4

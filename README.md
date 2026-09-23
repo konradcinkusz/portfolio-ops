@@ -52,13 +52,14 @@ portfolio-ops is meant to be **reused, not copied** ([ADR 0002](docs/adr/0002-di
 | Layer | Repository | Visibility | Holds | Updated by |
 |---|---|---|---|---|
 | Engine | `konradcinkusz/portfolio-ops` (this one) | public | the CLI, the composite action, JSON Schemas, documentation, fictional examples | semver tags |
-| Template | `portfolio-ops-template` (planned) | public, a template | a data skeleton and a caller workflow pinned to an engine version | nothing — it holds no logic |
+| Template | [`konradcinkusz/portfolio-ops-template`](https://github.com/konradcinkusz/portfolio-ops-template) | public, a template | a data skeleton and a caller workflow pinned to an engine version | nothing — it holds no logic |
 | Data | yours, created from the template | **private** | your real data files | bumping the pinned engine version |
 
-Until the template exists, start your data repository from a copy of
-[examples/starter](examples/starter) — **without** its `allow_public: true` line, which the
-example needs only because it lives here in public. Make the repository private, then add
-this workflow as `.github/workflows/portfolio.yml`:
+Create your data repository from the template: open
+[portfolio-ops-template](https://github.com/konradcinkusz/portfolio-ops-template), choose
+**Use this template → Create a new repository**, and make it **Private**. It starts with the
+fictional example data, a README on replacing it, and this workflow as
+`.github/workflows/portfolio.yml`, with the engine and every action pinned by commit SHA:
 
 ```yaml
 name: portfolio
