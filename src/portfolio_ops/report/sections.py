@@ -56,6 +56,12 @@ def _days(count: int) -> str:
     return f"{count} day" if count == 1 else f"{count} days"
 
 
+def _median_days(days: list[int]) -> str:
+    """The median clock: '1 day', '12 days', or '46.5 days' between two clocks."""
+    median = statistics.median(days)
+    return f"{median:g} day" if median == 1 else f"{median:g} days"
+
+
 @section(2)
 def stale(data: ReportInput) -> Section:
     """N2: active products whose clock exceeds stale_days."""
@@ -318,7 +324,7 @@ def health(data: ReportInput) -> Section:
     thresholds = data.portfolio.config.thresholds
     active = sum(1 for p in data.portfolio.products if p.status == "active")
     days = [clock.days for clock in data.clocks.values()]
-    median = f"{statistics.median(days):g} days" if days else "no active products"
+    median = _median_days(days) if days else "no active products"
     stale_count = sum(1 for clock in data.clocks.values() if clock.days > thresholds.stale_days)
     evaluated = [verdict for _, verdict in _evaluated(data)][:EVALUATED_FOCUS_COUNT]
     if evaluated:
