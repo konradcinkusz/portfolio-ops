@@ -86,7 +86,7 @@ def ignored(portfolio: Portfolio, name: str) -> bool:
 
 
 def shown(scan: AccountScan) -> tuple[AccountRepository, ...]:
-    """The repositories the report and the dashboard may name: with ``allow_public``, not the
+    """The repositories the report and the views may name: with ``allow_public``, not the
     private ones, because the report may then be public (§7.12)."""
     return tuple(r for r in scan.repositories if not (scan.hide_private and r.private))
 

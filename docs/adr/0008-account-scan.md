@@ -8,6 +8,8 @@
   account's endpoints in `src/portfolio_ops/github.py`, rule S8, the report's Account
   activity section, the dashboard's repositories panel, the action's `account-token`
   input
+- **Amended by:** [ADR 0009](0009-overview-pages.md) — the overview job receives the token
+  too, and the overview names what the report and the dashboard name
 
 ## Context
 

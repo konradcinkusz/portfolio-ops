@@ -37,11 +37,13 @@ pip install .
 portfolio-ops validate --path examples/starter
 portfolio-ops report --path examples/starter
 portfolio-ops dashboard --path examples/starter --output dashboard.html
+portfolio-ops overview --path examples/starter --output overview
 ```
 
 `validate` checks the fictional portfolio in [examples/starter](examples/starter) against
 the rules and prints nothing when it is valid. `report` prints this week's review as
-Markdown. `dashboard` writes the whole portfolio as one page to open in a browser.
+Markdown. `dashboard` writes the whole portfolio as one page to open in a browser, and
+`overview` as linked Markdown pages with charts, for GitHub to render in your repository.
 
 To install a release without cloning:
 `pipx install git+https://github.com/konradcinkusz/portfolio-ops@v0.4.1`.
@@ -174,9 +176,35 @@ Pin the action to a release's full commit SHA, with its tag in a comment, or at 
 the tag. The repository name is part of the contract: GitHub does not redirect renamed
 action repositories.
 
-The action runs `validate`, `report` and `dashboard`. The gates, `lookup` and `export` are
-for the moment you are about to act or to ask — run them in a clone of your data
-repository.
+The action runs `validate`, `report`, `dashboard` and `overview`. The gates, `lookup` and
+`export` are for the moment you are about to act or to ask — run them in a clone of your
+data repository.
+
+### The overview in your repository
+
+The weekly issue lists only what needs you. For the whole picture, the `overview` job
+renders the portfolio as five linked Markdown pages, and the `publish-overview` job commits
+them to `overview/` in your data repository whenever they change: after every push to
+`main`, every Monday and on demand. GitHub renders them — tables, links and Mermaid
+charts — on the web and in its mobile app, for the people who can read the repository and
+no one else. Start at `overview/README.md`:
+
+| Page | Holds |
+|---|---|
+| `README.md` | the numbers at a glance, what needs attention, this week's focus and next actions, where the week's work went, the latest decisions |
+| `products.md` | every product by status and every kernel, with the review dates on a timeline |
+| `repositories.md` | your account's repositories, those you worked on this week first |
+| `risks.md` | the risks, the findings and the copy-paste debt |
+| `decisions.md` | every decision, newest first, with its text |
+
+The weekly issue links the overview. The pages are generated: edit the data files, and the
+workflow rewrites them; `overview` never overwrites a file it did not write. The overview
+job only reads. The publish job is the only job that can write to the repository: it runs
+none of portfolio-ops' code and commits nothing but `overview/`. If a branch protection
+rule forbids direct pushes to `main`, the publish job fails and the pages stay an artifact
+of the run. A data repository made from an older template needs the two jobs copied from
+the workflow above. The design and its alternatives are in
+[ADR 0009](docs/adr/0009-overview-pages.md).
 
 ### The dashboard as a workflow artifact
 
@@ -191,19 +219,19 @@ no script, font or image. It works offline, from the artifact or from a local fi
 
 ### Scanning the account
 
-The workflow's own token sees only the data repository. Give the report and dashboard jobs
-a second, read-only token and they also scan your GitHub account: every repository you own,
-and which of them **you** pushed to since the same weekday last week. The weekly issue then
-names three things:
+The workflow's own token sees only the data repository. Give the report, dashboard and
+overview jobs a second, read-only token and they also scan your GitHub account: every
+repository you own, and which of them **you** pushed to since the same weekday last week.
+The weekly issue then names three things:
 
 - repositories you worked on that no product or kernel lists;
 - products that are not active, but were worked on;
 - repositories your `repos` lists that the account does not have.
 
-The dashboard gains a Repositories panel with every repository, public and private, the
-product or kernel it belongs to, and its latest push. The weekly issue links the workflow
-run whose artifacts hold that dashboard. Pushes by Dependabot or other bots do not count as your
-work. The scan is optional: without the token everything works as before, and the issue
+The dashboard gains a Repositories panel, and the overview a Repositories page, with every
+repository, public and private, the product or kernel it belongs to, and its latest push;
+the overview's home page shows where the week's work went. Pushes by Dependabot or other
+bots do not count as your work. The scan is optional: without the token everything works as before, and the issue
 says the account was not scanned.
 
 To set it up:
@@ -228,8 +256,8 @@ To set it up:
      ignore: [your-name/dotfiles, "your-name/*-notes"]   # * and ? match any characters
    ```
 
-The template's workflow already passes the secret to the report and dashboard jobs, and
-never to `validate`. A classic token (`ghp_…`) is refused: it cannot be read-only. When the
+The template's workflow already passes the secret to the report, dashboard and overview
+jobs, and never to `validate`. A classic token (`ghp_…`) is refused: it cannot be read-only. When the
 token expires or is revoked, the weekly issue says so, and everything else keeps working.
 
 If the issue says your activity could not be told apart from other pushes, GitHub did not
@@ -241,17 +269,18 @@ its alternatives are in [ADR 0008](docs/adr/0008-account-scan.md).
 
 | Input | Default | What it does |
 |---|---|---|
-| `command` | — (required) | `validate`, `report` or `dashboard` |
+| `command` | — (required) | `validate`, `report`, `dashboard` or `overview` |
 | `path` | `.` | The directory holding the data files, relative to the workspace |
 | `publish` | `false` | With `report`: keep one open `weekly-review` issue current |
 | `dry-run` | `false` | With `publish`: print the planned action and the issue body, send no write request |
 | `github-token` | the workflow's token | Used for the visibility check and for publishing |
-| `account-token` | — (not scanned) | With `report` or `dashboard`: a fine-grained, read-only token that scans your account; pass `secrets.PORTFOLIO_ACCOUNT_TOKEN` |
+| `account-token` | — (not scanned) | With `report`, `dashboard` or `overview`: a fine-grained, read-only token that scans your account; pass `secrets.PORTFOLIO_ACCOUNT_TOKEN` |
 | `python-version` | `3.13` | The Python that runs the engine |
 
 | Output | What it holds |
 |---|---|
 | `dashboard` | With `command: dashboard`: the path of the page, outside the workspace, for `actions/upload-artifact` |
+| `overview` | With `command: overview`: the directory of the pages, outside the workspace, for `actions/upload-artifact` and the publish-overview job |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -285,6 +314,7 @@ portfolio-ops idea-gate IDEA [--path DIR]
 portfolio-ops lookup SUBJECT TYPE [--path DIR] [--today YYYY-MM-DD]
 portfolio-ops dashboard [--path DIR] [--today YYYY-MM-DD] [--output FILE]
 portfolio-ops export [--path DIR] [--today YYYY-MM-DD] [--max-chars N]
+portfolio-ops overview [--path DIR] [--today YYYY-MM-DD] [--output DIR]
 portfolio-ops --version
 ```
 
@@ -331,6 +361,12 @@ portfolio-ops --version
 
   The decisions, newest first, fill whatever room the rest leaves. Paste it at the start
   of a conversation: `portfolio-ops export | pbcopy` on macOS, `| clip` on Windows.
+- **`overview`** writes the whole portfolio as five linked Markdown pages with Mermaid
+  charts, for GitHub to render in your data repository (see
+  [The overview in your repository](#the-overview-in-your-repository)). Like `dashboard`
+  it shows state and decides nothing, reads the history and scans the account when it
+  can, and works without either. It writes to `overview/` in the data directory unless
+  `--output` names another directory, and never overwrites a file it did not write.
 - **`report --publish`** keeps one open issue labelled `weekly-review` current: it creates,
   updates or closes it. It needs `GITHUB_TOKEN`, and the repository from `--repo` or
   `GITHUB_REPOSITORY`. **`--dry-run`** prints the planned action instead and sends no write

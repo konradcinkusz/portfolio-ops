@@ -19,8 +19,9 @@ portfolio-ops shows its state in three places:
 - The **export** (V2) is text for a language model.
 
 Nothing gives the owner a complete picture that opens where they already are: in the
-repository, on the web or in GitHub's mobile app. The constraints of V1 and §8.8 still
-hold:
+repository, on the web or in GitHub's mobile app. ADR 0007 rejected a Markdown dashboard
+because an issue body cannot show everything; Markdown files in the repository can. The
+constraints of V1 and §8.8 still hold:
 
 - the data is private;
 - a GitHub Pages site of a private repository can be public;
@@ -45,10 +46,29 @@ sections (P10):
 
 - `overview` validates first, reads the history for the clocks when there is one, and
   scans the account when the token is set.
-- It decides nothing.
-- Every value from the data is Markdown-escaped. Mermaid labels are cut down to letters,
-  digits, spaces and a few safe marks.
+- It decides nothing. Its "Needs attention" list repeats what the weekly report and the
+  dashboard already make stand out, each item with a link to the page that has the
+  details.
+- Every value from the data is Markdown-escaped, including the characters GitHub gives a
+  meaning beyond CommonMark: `~`, `$` and `&`. A decision's text keeps its line breaks in
+  a block quote, and nothing in it formats.
+- A Mermaid label keeps only letters, digits, spaces and `. - _ /`, so no name can break a
+  chart or start a Mermaid keyword; a task on the timeline starts with fixed text.
 - With `allow_public`, no private repository is named.
+
+**The charts show what the data knows.**
+
+- The pie counts the repositories with the owner's activity in the window by the product
+  or kernel that lists them, and the ignored and outside ones. The scan knows where the
+  work went, not how much of it there was.
+- The timeline shows the review dates of the paused and dormant products, with the
+  pages' own date as a milestone. Mermaid's marker for the reader's today is off: a page
+  generated on Monday and read on Friday would otherwise show two different todays.
+
+**It never overwrites what it did not write.** Each page starts with an HTML comment that
+says portfolio-ops generated it. A file without that comment where a page would go — the
+owner's README, with `--output` at the repository's root — stops the command with exit 2
+before anything is written.
 
 **Written by the workflow, with the least privilege that can write.**
 
@@ -69,7 +89,9 @@ data.
 
 - The Health line "last commit touching the data" leaves `overview/` aside, so the bot's
   commits do not look like the owner's.
-- In GitHub Actions the report's header links the overview next to the workflow run.
+- In GitHub Actions the report's header links the overview next to the workflow run, when
+  the data directory holds pages the overview wrote. The link goes to the default branch
+  (`HEAD`), where the publish job commits them.
 
 ## Consequences
 
@@ -99,3 +121,9 @@ data.
   runners and adds no third-party code to pin.
 - **Generating the root `README.md`.** Rejected: it belongs to the owner, and a generated
   one would overwrite their notes. The root README links the overview instead.
+- **Deleting the other files of the output directory.** Rejected: `--output` may name a
+  directory that holds anything. The publish job replaces `overview/` as a whole, so a page
+  that a later version drops disappears there.
+- **Sizing the pie by commits or lines changed.** Rejected: it would read each
+  repository's history, beyond the read-only `Metadata` permission the account token has,
+  with many more requests on every run.

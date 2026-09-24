@@ -5,6 +5,9 @@
   confirm
 - **Governs:** `src/portfolio_ops/views/`, the `dashboard` and `export` commands, the
   action's `dashboard` command and output
+- **Amended by:** [ADR 0009](0009-overview-pages.md) — a Markdown view of everything after
+  all: the "Markdown dashboard" rejected below as an issue body is the overview, as pages
+  committed to the data repository
 
 ## Context
 

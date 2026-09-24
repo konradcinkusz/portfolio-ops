@@ -38,6 +38,7 @@ on Windows):
 | Regenerate the golden reports and pages after an intended change | `python -m pytest --update-golden`, then review the diff |
 | Run the engine | `portfolio-ops validate --path examples/starter` |
 | Look at the example dashboard | `portfolio-ops dashboard --path examples/starter --output dashboard.html` |
+| Look at the example overview | `portfolio-ops overview --path examples/starter --output overview`, then open `overview/README.md` in an editor with a Markdown preview |
 
 CI runs all of these on every pull request — lint, types, the tests on Python 3.11 and
 3.13, the dependency audit, the secret scan and the action's self-test — plus CodeQL.
@@ -56,7 +57,7 @@ CI runs all of these on every pull request — lint, types, the tests on Python 
 | Gates (B1–B6) | `src/portfolio_ops/rules/gates.py`, `src/portfolio_ops/report/overlap.py` | `tests/unit/rules/test_gates.py`, `tests/unit/test_gate_commands.py`, `tests/fixtures/B*/` |
 | Kernels (K1, K2) | `src/portfolio_ops/rules/kernels.py` | `tests/unit/rules/test_kernels.py` |
 | Lookup (P3) | `src/portfolio_ops/rules/memory.py` | `tests/unit/rules/test_memory.py`, `tests/unit/test_lookup_command.py` |
-| Views: dashboard (V1), export (V2) | `src/portfolio_ops/views/` | `tests/unit/views/`, `tests/unit/test_view_commands.py`, `tests/integration/test_views.py` |
+| Views: dashboard (V1), export (V2), overview (V3) | `src/portfolio_ops/views/` | `tests/unit/views/`, `tests/unit/test_view_commands.py`, `tests/integration/test_views.py` |
 | The account scan (A1–A3) | `src/portfolio_ops/account.py`, `src/portfolio_ops/github.py`, `src/portfolio_ops/rules/account.py` | `tests/unit/test_account.py`, `tests/unit/rules/test_account.py`, `tests/unit/report/test_account_section.py`, `tests/unit/test_account_commands.py` |
 | Command line | `src/portfolio_ops/cli.py` | `tests/unit/test_cli.py` |
 | Composite action | `action.yml` | the `self-test` job in `.github/workflows/ci.yml` |
@@ -108,11 +109,12 @@ text the engine really prints — a test keeps this table honest.
 | `idea-gate checks an idea` | `idea-gate` compares a product whose status is `idea` | Name the idea, or give the product the status `idea` if it is one |
 | `does not set allow_public: true` | S7: the data repository is public | Make the repository private, or set `allow_public: true` if you build in public |
 | `cannot tell whether the data repository is public` | S7: the guard could not ask GitHub | In Actions: pass the workflow's token and check its access. Locally this is a warning only |
-| `this is a shallow clone` | `report` needs the full history for the clock, and the dashboard shows no clocks without it | Set `fetch-depth: 0` on `actions/checkout`, or run `git fetch --unshallow` |
-| `is not inside a git repository` | `report` reads the clock from git; the dashboard leaves the clocks out | Run it in a clone of the data repository |
+| `this is a shallow clone` | `report` needs the full history for the clock, and the dashboard and the overview show no clocks without it | Set `fetch-depth: 0` on `actions/checkout`, or run `git fetch --unshallow` |
+| `is not inside a git repository` | `report` reads the clock from git; the dashboard and the overview leave the clocks out | Run it in a clone of the data repository |
 | `the export needs at least` | `--max-chars` is too small for the products, risks and vocabulary, which are always exported in full | Raise `--max-chars` to the number the message names, or drop it for the default of 12000 |
 | `expected a whole number above 0` | `--max-chars` is not a positive whole number | Pass a number of characters, such as `--max-chars 8000` |
-| `cannot write` | `dashboard --output` names a file that cannot be written — often in a directory that does not exist | Create the directory, or choose another path |
+| `cannot write` | `dashboard --output` names a file that cannot be written — often in a directory that does not exist — or `overview --output` a directory that cannot be made | Create the directory, or choose another path |
+| `was not written by portfolio-ops, and the overview would overwrite it` | `overview --output` names a directory that holds a file of yours where a page would go, such as your README | Choose another directory, for example the default `overview/` |
 | `--publish needs GITHUB_TOKEN` | Publishing writes an issue and needs a token | Set `GITHUB_TOKEN`, or add `--dry-run` to preview |
 | `--dry-run previews publishing, so it needs --publish` | `--dry-run` only makes sense when publishing | Add `--publish`, or drop `--dry-run` |
 | `git is not on PATH` | `scripts/setup.py` needs git | Install git from <https://git-scm.com/downloads> |

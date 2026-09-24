@@ -25,6 +25,9 @@ RISKS_FILE = "risks.yaml"
 FINDINGS_FILE = "findings.yaml"
 DECISIONS_FILE = "decisions.md"
 FILE_ORDER = (CONFIG_FILE, PRODUCTS_FILE, KERNELS_FILE, RISKS_FILE, FINDINGS_FILE, DECISIONS_FILE)
+# Where the workflow commits the overview's pages (V3, §7.11) in the data directory. They are
+# not data, so the last data commit leaves them aside (§7.4).
+OVERVIEW_DIR = "overview"
 
 # §4.4
 ID_PATTERN = r"[a-z0-9][a-z0-9-]{0,62}"
@@ -281,7 +284,7 @@ class AccountScan:
 
 @dataclass(frozen=True)
 class Account:
-    """What the report and the dashboard know about the account: a scan, or why there is
+    """What the report and the views know about the account: a scan, or why there is
     none. ``failed`` means a token was set and the scan still did not happen — a report
     item; without a token the account is simply not scanned (P8)."""
 

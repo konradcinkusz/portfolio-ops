@@ -34,6 +34,7 @@ class ReportInput:
     changes: tuple[Change, ...] = ()  # P1: every status and state change in history
     account: Account = NOT_SCANNED  # A1–A3: the account scan, or why there is none
     run: WorkflowRun | None = None  # in GitHub Actions: the run, linked from the header
+    overview: str | None = None  # in GitHub Actions: the overview's home page, when there is one
 
 
 @dataclass(frozen=True)
