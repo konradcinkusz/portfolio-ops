@@ -244,6 +244,50 @@ class Change:
 
 
 @dataclass(frozen=True)
+class AccountRepository:
+    """One repository of the owner's GitHub account, as the account scan saw it (§7.12).
+
+    ``activity`` says whether the owner's own activity was read: ``unchecked`` for a
+    repository that is not a candidate (not pushed in the window, archived, or a fork that
+    ``repos`` does not list), ``read`` with ``owner_active_on`` the date of the owner's
+    latest activity (None if there is none), and ``unreadable`` where the activity list
+    could not be read — there a push by anyone counts.
+    """
+
+    name: str  # OWNER/NAME, as GitHub spells it
+    private: bool
+    fork: bool
+    archived: bool
+    pushed_on: dt.date | None  # the latest push by anyone, as a UTC date
+    activity: Literal["unchecked", "read", "unreadable"] = "unchecked"
+    owner_active_on: dt.date | None = None
+
+
+@dataclass(frozen=True)
+class AccountScan:
+    """The account's repositories, and the window the owner's activity is judged in."""
+
+    login: str
+    since: dt.date  # the window's first day
+    until: dt.date  # today
+    repositories: tuple[AccountRepository, ...]
+    left_out: str | None = None  # the data repository, which the scan leaves out
+    hide_private: bool = False  # allow_public: private repositories are not named
+    unreadable: str = ""  # why activity lists could not be read, when some could not
+
+
+@dataclass(frozen=True)
+class Account:
+    """What the report and the dashboard know about the account: a scan, or why there is
+    none. ``failed`` means a token was set and the scan still did not happen — a report
+    item; without a token the account is simply not scanned (P8)."""
+
+    scan: AccountScan | None = None
+    problem: str = ""
+    failed: bool = False
+
+
+@dataclass(frozen=True)
 class Thresholds:
     stale_days: int = 30
     actions_per_week: float = 1

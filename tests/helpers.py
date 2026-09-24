@@ -81,11 +81,20 @@ class FakeGitHub:
     routes: dict[tuple[str, str], Response | Exception] = field(default_factory=dict)
     requests: list[Request] = field(default_factory=list)
 
-    def on(self, method: str, path: str, status: int = 200, body: Any = None) -> FakeGitHub:
+    def on(
+        self,
+        method: str,
+        path: str,
+        status: int = 200,
+        body: Any = None,
+        headers: Mapping[str, str] | None = None,
+    ) -> FakeGitHub:
+        """Answer requests for ``path``. A path with a query answers only that exact query;
+        one without answers every query."""
         from portfolio_ops.github import Response
 
         payload = b"" if body is None else json.dumps(body).encode()
-        self.routes[(method, path)] = Response(status, payload)
+        self.routes[(method, path)] = Response(status, payload, dict(headers or {}))
         return self
 
     def fail(self, method: str, path: str, error: Exception) -> FakeGitHub:
@@ -96,13 +105,19 @@ class FakeGitHub:
         from portfolio_ops.github import Response
 
         self.requests.append(request)
-        path = request.url.split("://", 1)[-1].split("/", 1)[-1]
-        route = self.routes.get((request.method, "/" + path.split("?", 1)[0]))
+        path = "/" + request.url.split("://", 1)[-1].split("/", 1)[-1]
+        route = self.routes.get((request.method, path))
+        if route is None:
+            route = self.routes.get((request.method, path.split("?", 1)[0]))
         if route is None:
             return Response(404, b'{"message": "Not Found"}')
         if isinstance(route, Exception):
             raise route
         return route
+
+    def paths(self) -> list[str]:
+        """The path and query of every request, in order."""
+        return ["/" + r.url.split("://", 1)[-1].split("/", 1)[-1] for r in self.requests]
 
     @property
     def writes(self) -> list[Request]:

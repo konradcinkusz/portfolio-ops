@@ -15,7 +15,7 @@ import json
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -36,6 +36,7 @@ class Request:
 class Response:
     status: int
     body: bytes
+    headers: Mapping[str, str] = field(default_factory=dict)  # names in lower case
 
 
 Transport = Callable[[Request], Response]
@@ -48,17 +49,35 @@ def urllib_transport(request: Request) -> Response:
     )
     try:
         with urllib.request.urlopen(prepared, timeout=20) as reply:  # noqa: S310 — same
-            return Response(reply.status, reply.read())
+            return Response(reply.status, reply.read(), _headers(reply.headers.items()))
     except urllib.error.HTTPError as reply:
-        return Response(reply.code, reply.read())
+        return Response(reply.code, reply.read(), _headers(reply.headers.items()))
+
+
+def _headers(items: Iterable[tuple[str, str]]) -> dict[str, str]:
+    return {name.lower(): value for name, value in items}
 
 
 class GitHubError(Exception):
-    """A request that did not succeed. ``status`` is None when nothing came back."""
+    """A request that did not succeed. ``status`` is None when nothing came back.
 
-    def __init__(self, status: int | None, message: str) -> None:
+    ``permissions`` is what GitHub's ``X-Accepted-GitHub-Permissions`` header says the
+    request needs, when it says so; ``rate_limited`` is true when the token's rate limit is
+    spent.
+    """
+
+    def __init__(
+        self,
+        status: int | None,
+        message: str,
+        *,
+        permissions: str | None = None,
+        rate_limited: bool = False,
+    ) -> None:
         super().__init__(message)
         self.status = status
+        self.permissions = permissions
+        self.rate_limited = rate_limited
 
 
 @dataclass(frozen=True)
@@ -68,6 +87,17 @@ class Issue:
     created_at: str
 
 
+@dataclass(frozen=True)
+class OwnedRepository:
+    """One repository of the account, as ``GET /user/repos`` lists it."""
+
+    name: str  # OWNER/NAME, as GitHub spells it
+    private: bool
+    fork: bool
+    archived: bool
+    pushed_at: str | None  # ISO 8601, UTC; None for a repository never pushed to
+
+
 class GitHubClient:
     def __init__(self, transport: Transport, token: str | None, api_url: str = API_URL) -> None:
         self._transport = transport
@@ -75,6 +105,12 @@ class GitHubClient:
         self._api_url = api_url.rstrip("/")
 
     def _call(self, method: str, path: str, payload: Any = None) -> tuple[int, Any]:
+        status, data, _ = self._send(method, path, payload)
+        return status, data
+
+    def _send(
+        self, method: str, path: str, payload: Any = None
+    ) -> tuple[int, Any, Mapping[str, str]]:
         headers = {
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
@@ -98,16 +134,22 @@ class GitHubClient:
                 data = json.loads(response.body)
             except ValueError:
                 data = None
-        return response.status, data
+        return response.status, data, response.headers
 
     def _expect(
         self, method: str, path: str, payload: Any = None, ok: tuple[int, ...] = (200,)
     ) -> Any:
-        status, data = self._call(method, path, payload)
+        status, data, headers = self._send(method, path, payload)
         if status not in ok:
             detail = data.get("message") if isinstance(data, dict) else None
             suffix = f": {detail}" if isinstance(detail, str) else ""
-            raise GitHubError(status, f"{method} {path} returned HTTP {status}{suffix}")
+            raise GitHubError(
+                status,
+                f"{method} {path} returned HTTP {status}{suffix}",
+                permissions=headers.get("x-accepted-github-permissions") or None,
+                rate_limited=status == 429
+                or (status == 403 and headers.get("x-ratelimit-remaining") == "0"),
+            )
         return data
 
     def repository_private(self, repository: str) -> bool | None:
@@ -175,3 +217,49 @@ class GitHubClient:
     def close_issue(self, repository: str, number: int) -> None:
         payload = {"state": "closed", "state_reason": "completed"}
         self._expect("PATCH", f"/repos/{repository}/issues/{number}", payload)
+
+    # ------------------------------------------------------------ the account (§7.12)
+
+    def login(self) -> str:
+        """The login of the account the token belongs to."""
+        data = self._expect("GET", "/user")
+        login = data.get("login") if isinstance(data, dict) else None
+        if not isinstance(login, str) or not login:
+            raise GitHubError(200, "GET /user returned no login")
+        return login
+
+    def owned_repositories(self) -> list[OwnedRepository]:
+        """Every repository the token's account owns, page by page."""
+        found: list[OwnedRepository] = []
+        query = urllib.parse.urlencode({"affiliation": "owner", "per_page": 100})
+        for page in range(1, 51):
+            data = self._expect("GET", f"/user/repos?{query}&page={page}")
+            if not isinstance(data, list):
+                raise GitHubError(200, "GET /user/repos returned no list")
+            for item in data:
+                if not isinstance(item, dict) or not isinstance(item.get("full_name"), str):
+                    continue
+                pushed = item.get("pushed_at")
+                found.append(
+                    OwnedRepository(
+                        name=item["full_name"],
+                        private=item.get("private") is True,
+                        fork=item.get("fork") is True,
+                        archived=item.get("archived") is True,
+                        pushed_at=pushed if isinstance(pushed, str) else None,
+                    )
+                )
+            if len(data) < 100:
+                break
+        return found
+
+    def latest_activity(self, repository: str, actor: str) -> str | None:
+        """When ``actor`` last acted in the repository — pushed, force-pushed, created or
+        deleted a branch, or merged — as its activity list records it; None if never."""
+        query = urllib.parse.urlencode({"actor": actor, "direction": "desc", "per_page": 1})
+        data = self._expect("GET", f"/repos/{repository}/activity?{query}")
+        if not isinstance(data, list):
+            raise GitHubError(200, f"GET /repos/{repository}/activity returned no list")
+        entry = data[0] if data else None
+        stamp = entry.get("timestamp") if isinstance(entry, dict) else None
+        return stamp if isinstance(stamp, str) else None
