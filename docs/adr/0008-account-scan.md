@@ -62,9 +62,11 @@ gap.
 
 **The owner's activity, not anyone's.** A push date alone counts Dependabot's pushes, so a
 paused product with Dependabot switched on would look worked on every week. The activity
-list says who acted. Where it cannot be read — HTTP 403 or 404 for that repository — the
-push date counts for it. The report and the dashboard say so, and name the permission
-GitHub asks for when its `X-Accepted-GitHub-Permissions` header names one.
+list says who acted. Where it cannot be read for one repository — HTTP 403 or 404, or an
+answer such as 409 for an empty repository — the push date counts for that repository.
+The report and the dashboard say so, and name the permission GitHub asks for when its
+`X-Accepted-GitHub-Permissions` header names one. A rejected token, a spent rate limit or
+a dead network stops the whole scan instead.
 
 **Pure rules, a thin adapter** (P11, P13).
 

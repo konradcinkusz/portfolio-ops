@@ -204,6 +204,30 @@ def test_an_unreadable_activity_list_falls_back_to_the_push_and_says_why() -> No
     )
 
 
+def test_an_odd_answer_about_one_repository_leaves_only_that_one_to_the_push_date() -> None:
+    fake = github(repo("empty"), repo("alpha"))
+    fake.on("GET", "/repos/example-owner/empty/activity", 409, {"message": "Repository is empty"})
+    fake.on("GET", activity("alpha"), body=[{"timestamp": "2026-09-19T08:00:00Z"}])
+
+    account = scan(fake)
+
+    assert account.scan is not None
+    assert [r.activity for r in account.scan.repositories] == ["unreadable", "read"]
+    assert account.scan.unreadable == (
+        "GitHub did not return the activity list of example-owner/empty (HTTP 409)"
+    )
+
+
+def test_a_token_revoked_during_the_scan_stops_it() -> None:
+    fake = github(repo("alpha"))
+    fake.on("GET", "/repos/example-owner/alpha/activity", 401, {"message": "Bad credentials"})
+
+    account = scan(fake)
+
+    assert account.failed
+    assert account.problem.startswith("GitHub rejected PORTFOLIO_ACCOUNT_TOKEN (HTTP 401)")
+
+
 @pytest.mark.parametrize(
     ("status", "headers", "message"),
     [

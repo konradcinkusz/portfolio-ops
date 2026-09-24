@@ -75,10 +75,13 @@ def scan_account(
             try:
                 latest = client.latest_activity(owned.name, login)
             except GitHubError as exc:
-                if exc.rate_limited or exc.status not in (403, 404):
+                # A spent rate limit, a revoked token or a dead network stops the scan; any
+                # other answer about one repository — no permission, an empty repository —
+                # leaves that one to the push date.
+                if exc.rate_limited or exc.status in (None, 401):
                     raise
                 repository = replace(repository, activity="unreadable")
-                unreadable = unreadable or _unreadable(exc)
+                unreadable = unreadable or _unreadable(exc, owned.name)
             else:
                 repository = replace(repository, activity="read", owner_active_on=utc_date(latest))
         repositories.append(repository)
@@ -93,9 +96,11 @@ def scan_account(
     )
 
 
-def _unreadable(exc: GitHubError) -> str:
-    asks = f"; GitHub asks for {exc.permissions}" if exc.permissions else ""
-    return f"the token cannot read the repositories' activity lists (HTTP {exc.status}{asks})"
+def _unreadable(exc: GitHubError, name: str) -> str:
+    if exc.status in (403, 404):
+        asks = f"; GitHub asks for {exc.permissions}" if exc.permissions else ""
+        return f"the token cannot read the repositories' activity lists (HTTP {exc.status}{asks})"
+    return f"GitHub did not return the activity list of {name} (HTTP {exc.status})"
 
 
 def read_account(
