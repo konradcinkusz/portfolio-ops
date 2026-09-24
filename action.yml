@@ -5,7 +5,7 @@
 # Every input reaches the shell through `env`, never through `${{ }}` inside a script, so
 # no input can inject shell code.
 name: portfolio-ops
-description: Validate a private portfolio data repository, keep one weekly-review issue current and render its dashboard.
+description: Validate a private portfolio data repository, keep one weekly-review issue current, render its dashboard and check the account's work against it.
 author: Konrad Cinkusz
 branding:
   icon: check-square
@@ -31,6 +31,12 @@ inputs:
     description: Token for the visibility check (rule S7) and for publishing. The workflow's own token is enough.
     required: false
     default: ${{ github.token }}
+  account-token:
+    description: >-
+      Optional — with command: report or dashboard, scans the account (rules A1–A3). A
+      fine-grained, read-only token of the account's owner; pass the secret
+      PORTFOLIO_ACCOUNT_TOKEN. Empty: the account is not scanned.
+    required: false
   python-version:
     description: The Python that runs the engine.
     required: false
@@ -93,6 +99,9 @@ runs:
         PUBLISH: ${{ inputs.publish }}
         DRY_RUN: ${{ inputs.dry-run }}
         GITHUB_TOKEN: ${{ inputs.github-token }}
+        # Only report and dashboard scan the account, so only they receive its token.
+        PORTFOLIO_ACCOUNT_TOKEN: ${{ inputs.command != 'validate' && inputs.account-token || '' }}
+        ACCOUNT_TOKEN_GIVEN: ${{ inputs.account-token != '' }}
       run: |
         set -euo pipefail
         args=("$COMMAND" --path "$DATA_PATH")
@@ -109,6 +118,9 @@ runs:
         esac
         if [ "$COMMAND" != report ] && { [ "$PUBLISH" = "true" ] || [ "$DRY_RUN" = "true" ]; }; then
           echo "::warning title=portfolio-ops::publish and dry-run apply to the report command only"
+        fi
+        if [ "$COMMAND" = validate ] && [ "$ACCOUNT_TOKEN_GIVEN" = "true" ]; then
+          echo "::warning title=portfolio-ops::account-token applies to report and dashboard only; validate never scans the account"
         fi
         # The page goes outside the workspace, so it can never be committed by accident.
         page="$RUNNER_TEMP/portfolio-dashboard.html"

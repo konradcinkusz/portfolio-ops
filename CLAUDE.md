@@ -18,7 +18,8 @@ This repository follows the `architecture-standards` marketplace, declared in
 service, so only part of the constitution applies — [ADR 0001](docs/adr/0001-standards-scope.md)
 records which part and why:
 
-- **Apply:** P5 (the only secret is `GITHUB_TOKEN`, from the environment, never printed),
+- **Apply:** P5 (the secrets are `GITHUB_TOKEN` and the optional, read-only
+  `PORTFOLIO_ACCOUNT_TOKEN`, both from the environment, never printed — ADR 0008),
   P8 (optional capabilities degrade: without a token `report` still renders), P10 (rules
   and report sections are registered functions), P11 (YAML and Markdown become typed
   models in `loading.py`; git and GitHub sit behind small adapters), P12 (tag-driven

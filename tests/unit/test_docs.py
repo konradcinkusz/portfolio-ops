@@ -131,7 +131,7 @@ def test_the_changelog_has_an_entry_for_the_current_version() -> None:
 def test_secrets_env_example_documents_the_variables_a_user_sets() -> None:
     example = (ROOT / "secrets.env.example").read_text(encoding="utf-8")
 
-    for name in ("GITHUB_TOKEN", "GITHUB_REPOSITORY"):
+    for name in ("GITHUB_TOKEN", "GITHUB_REPOSITORY", "PORTFOLIO_ACCOUNT_TOKEN"):
         assert re.search(rf"^{name}=$", example, re.MULTILINE), name
 
 

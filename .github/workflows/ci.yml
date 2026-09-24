@@ -162,6 +162,8 @@ jobs:
           set -euo pipefail
           grep -q '<meta name="robots" content="noindex, nofollow">' "$PAGE"
           grep -q 'never publish it on GitHub Pages' "$PAGE"
+          # No account token here: the repositories panel says the account was not scanned.
+          grep -q 'The account was not scanned: PORTFOLIO_ACCOUNT_TOKEN is not set' "$PAGE"
           if grep -Eq '<script|<link|<img|<iframe| src=|url\(|://' "$PAGE"; then
             echo "::error::the dashboard must not load anything: $(grep -Eo '<script|<link|<img|<iframe| src=|url\(|://' "$PAGE" | head -1)"
             exit 1

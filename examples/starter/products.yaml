@@ -1,4 +1,5 @@
-# Fictional products: one of each status.
+# Fictional products: one of each status. `repos` names each product's GitHub repositories,
+# for the account scan; the owner example-owner is invented too.
 products:
   - id: tidewatch
     name: Tidewatch
@@ -8,6 +9,7 @@ products:
     feeds_from:
       - kernel: sync-core
         mode: package
+    repos: [example-owner/tidewatch, example-owner/tidewatch-site]
 
   - id: fern-journal
     name: Fern Journal
@@ -17,6 +19,7 @@ products:
     feeds_from:
       - kernel: sync-core
         mode: copy
+    repos: [example-owner/fern-journal]
 
   - id: lantern-maps
     name: Lantern Maps
@@ -29,12 +32,14 @@ products:
     status_reason: Waiting for the calendar integration to leave preview
     review_by: 2026-11-16
     next_action: Prototype the weekly do-not-disturb schedule
+    repos: [example-owner/quiet-hours]
 
   - id: paper-kite
     name: Paper Kite
     status: dormant
     status_reason: Released and stable; no investment planned
     review_by: 2027-03-01
+    repos: [example-owner/paper-kite]
 
   - id: old-lantern
     name: Old Lantern

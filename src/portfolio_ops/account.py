@@ -134,8 +134,8 @@ def read_account(
 def _failure(exc: GitHubError) -> str:
     if exc.status == 401:
         return (
-            f"GitHub rejected {ACCOUNT_TOKEN} (HTTP 401): it has expired or been revoked — "
-            "create a new fine-grained token and replace the secret"
+            "GitHub rejected PORTFOLIO_ACCOUNT_TOKEN (HTTP 401): it has expired or been "
+            "revoked — create a new fine-grained token and replace the secret"
         )
     if exc.rate_limited:
         return f"the token's GitHub rate limit is spent — {NEXT_RUN}"

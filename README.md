@@ -17,7 +17,8 @@ keeps a single weekly-review issue in that person's private repository up to dat
 exists because the only real limit on a pile of side projects is its owner's attention: it
 caps how many projects are in progress, flags the ones that have stopped moving, gates
 external moves and new ideas on what is already known, and remembers what was decided and
-verified, so none of that depends on willpower.
+verified, so none of that depends on willpower. With a read-only token it also watches
+the owner's GitHub account, and names the repositories worked on outside the plan.
 
 It is a command line and a GitHub Action. Your data — a few YAML files and a Markdown
 decision log — stays in a private repository of your own; this repository holds only the
@@ -43,7 +44,7 @@ the rules and prints nothing when it is valid. `report` prints this week's revie
 Markdown. `dashboard` writes the whole portfolio as one page to open in a browser.
 
 To install a release without cloning:
-`pipx install git+https://github.com/konradcinkusz/portfolio-ops@v0.3.0`.
+`pipx install git+https://github.com/konradcinkusz/portfolio-ops@v0.4.0`.
 
 ## Using it for your own portfolio
 
@@ -141,6 +142,51 @@ stalled projects, and a Pages site can be public even when its repository is pri
 page says so itself, asks search engines not to index it, and loads nothing from anywhere:
 no script, font or image. It works offline, from the artifact or from a local file.
 
+### Scanning the account
+
+The workflow's own token sees only the data repository. Give the report and dashboard jobs
+a second, read-only token and they also scan your GitHub account: every repository you own,
+and which of them **you** pushed to since the same weekday last week. The weekly issue then
+names three things:
+
+- repositories you worked on that no product or kernel lists;
+- products that are not active, but were worked on;
+- repositories your `repos` lists that the account does not have.
+
+The dashboard gains a Repositories panel with every repository, the product or kernel it
+belongs to, and its latest push. Pushes by Dependabot or other bots do not count as your
+work. The scan is optional: without the token everything works as before, and the issue
+says the account was not scanned.
+
+To set it up:
+
+1. On GitHub, open **Settings → Developer settings → Personal access tokens → Fine-grained
+   tokens → Generate new token**.
+   - **Resource owner:** your account.
+   - **Expiration:** a date you will remember, for example a year ahead.
+   - **Repository access:** All repositories.
+   - **Permissions:** nothing to add. The read-only `Metadata` permission every token has
+     is what the scan uses.
+2. In your data repository, open **Settings → Secrets and variables → Actions → New
+   repository secret**, name it `PORTFOLIO_ACCOUNT_TOKEN`, and paste the token. Paste it
+   nowhere else: not into a file, an issue or a chat.
+3. Add `repos: [OWNER/NAME, …]` to each product and kernel in your data, and list the
+   repositories that are not projects under `account.ignore` in `config.yaml`:
+
+   ```yaml
+   account:
+     ignore: [your-name/dotfiles, "your-name/*-notes"]   # * and ? match any characters
+   ```
+
+The template's workflow already passes the secret to the report and dashboard jobs, and
+never to `validate`. A classic token (`ghp_…`) is refused: it cannot be read-only. When the
+token expires or is revoked, the weekly issue says so, and everything else keeps working.
+
+If the issue says your activity could not be told apart from other pushes, GitHub did not
+show the token a repository's activity list. It names the permission it asked for: add
+that permission to the token, or accept that a push by anyone counts there. The design and
+its alternatives are in [ADR 0008](docs/adr/0008-account-scan.md).
+
 ### Action inputs
 
 | Input | Default | What it does |
@@ -150,6 +196,7 @@ no script, font or image. It works offline, from the artifact or from a local fi
 | `publish` | `false` | With `report`: keep one open `weekly-review` issue current |
 | `dry-run` | `false` | With `publish`: print the planned action and the issue body, send no write request |
 | `github-token` | the workflow's token | Used for the visibility check and for publishing |
+| `account-token` | — (not scanned) | With `report` or `dashboard`: a fine-grained, read-only token that scans your account; pass `secrets.PORTFOLIO_ACCOUNT_TOKEN` |
 | `python-version` | `3.13` | The Python that runs the engine |
 
 | Output | What it holds |
@@ -175,7 +222,7 @@ The JSON Schemas let an editor check a file as you type. With the YAML extension
 VS Code, for example, put this on the first line of `products.yaml`:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/konradcinkusz/portfolio-ops/v0.3.0/src/portfolio_ops/schemas/products.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/konradcinkusz/portfolio-ops/v0.4.0/src/portfolio_ops/schemas/products.schema.json
 ```
 
 ## Commands
@@ -197,10 +244,12 @@ portfolio-ops --version
   status or a risk's state that changed since the previous commit without a decision
   dated that day; it needs no history otherwise, and works outside a repository.
 - **`report`** prints the weekly review as Markdown: Stale, Escalations, Overdue reviews,
-  Expired acceptances, Expired claims, Copy-paste debt, Changes without a decision, Focus
-  and Health. It reads how long each active product has stood still, and what changed
-  this week, from git history, so it needs a full clone. `--today` fixes the date, which
-  makes the output reproducible.
+  Expired acceptances, Expired claims, Copy-paste debt, Changes without a decision,
+  Account activity, Focus and Health. It reads how long each active product has stood
+  still, and what changed this week, from git history, so it needs a full clone. With
+  `PORTFOLIO_ACCOUNT_TOKEN` set it also scans your account (see
+  [Scanning the account](#scanning-the-account)). `--today` fixes the date, which makes the
+  output reproducible.
 - **`gate`** asks whether an external move — a store listing, a grant application, a
   talk — may go ahead. It collects the risks of the product, of every kernel it feeds
   from and of the portfolio that apply to the context, and fails on an open high or
@@ -219,6 +268,7 @@ portfolio-ops --version
   - the risks and findings
   - which products and kernels share each capability
   - the latest decisions with their text
+  - with `PORTFOLIO_ACCOUNT_TOKEN` set, your account's repositories and their latest pushes
 
   It shows state and decides nothing. Without git history it leaves out the clocks and
   says why. It writes to standard output unless `--output` names a file.
@@ -258,9 +308,12 @@ portfolio-ops is a single-owner tool that runs in the owner's own repository. It
 - **a hosted service.** It runs in your repository's CI and on your machine, and nowhere
   else.
 - **a place for credentials, tokens or personal data about other people.** Record "the
-  investor declined", not the person's name.
+  investor declined", not the person's name. The one token you may add lives in your
+  repository's Actions secrets, read-only; never write a token into the data files, and
+  never give portfolio-ops a classic token.
 - **a discovery tool.** Its checks know only what you have registered; a risk you never
-  wrote down passes every check.
+  wrote down passes every check. The account scan names repositories you worked on, but
+  registers nothing: what is in your portfolio stays your decision.
 - **meant for public data repositories.** Your files list your risks, rejections and
   stalled projects. The engine refuses a public repository unless you set
   `allow_public: true` on purpose — for example because you build in public.

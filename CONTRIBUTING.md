@@ -19,7 +19,8 @@ python scripts/setup.py
 It checks the prerequisites, creates `.venv`, installs portfolio-ops with its development
 tools at the versions pinned in `pyproject.toml`, installs the pre-commit hook that scans
 every commit for secrets, and runs the tests. Nothing to configure: `GITHUB_TOKEN` is
-optional and only needed to publish a report (see [secrets.env.example](secrets.env.example)).
+optional and only needed to publish a report, and `PORTFOLIO_ACCOUNT_TOKEN` only to scan an
+account (see [secrets.env.example](secrets.env.example)). The tests never reach GitHub.
 CI runs this same script, so if it works in CI it works for you.
 
 ## Everyday commands
@@ -47,7 +48,7 @@ CI runs all of these on every pull request — lint, types, the tests on Python 
 |---|---|---|
 | Typed model, JSON Schemas | `src/portfolio_ops/model.py`, `src/portfolio_ops/schemas/` | `tests/unit/test_loading.py` |
 | Reading the data (P11), S6 | `src/portfolio_ops/loading.py` | `tests/unit/test_loading.py`, `tests/unit/test_schema_version.py` |
-| Rules S1–S5, P2, L1, L2 | `src/portfolio_ops/rules/` | `tests/unit/rules/`, `tests/fixtures/<rule-id>/` |
+| Rules S1–S5, S8, P2, L1, L2 | `src/portfolio_ops/rules/` | `tests/unit/rules/`, `tests/fixtures/<rule-id>/` |
 | Visibility guard (S7) | `src/portfolio_ops/guard.py`, `src/portfolio_ops/github.py` | `tests/unit/test_guard.py` |
 | The clock (N1) | `src/portfolio_ops/history.py`, `src/portfolio_ops/git.py` | `tests/integration/test_clock.py` |
 | Changes and their decisions (P1) | `src/portfolio_ops/rules/changes.py`, `src/portfolio_ops/history.py` | `tests/unit/rules/test_changes.py`, `tests/integration/test_changes.py` |
@@ -56,6 +57,7 @@ CI runs all of these on every pull request — lint, types, the tests on Python 
 | Kernels (K1, K2) | `src/portfolio_ops/rules/kernels.py` | `tests/unit/rules/test_kernels.py` |
 | Lookup (P3) | `src/portfolio_ops/rules/memory.py` | `tests/unit/rules/test_memory.py`, `tests/unit/test_lookup_command.py` |
 | Views: dashboard (V1), export (V2) | `src/portfolio_ops/views/` | `tests/unit/views/`, `tests/unit/test_view_commands.py`, `tests/integration/test_views.py` |
+| The account scan (A1–A3) | `src/portfolio_ops/account.py`, `src/portfolio_ops/github.py`, `src/portfolio_ops/rules/account.py` | `tests/unit/test_account.py`, `tests/unit/rules/test_account.py`, `tests/unit/report/test_account_section.py`, `tests/unit/test_account_commands.py` |
 | Command line | `src/portfolio_ops/cli.py` | `tests/unit/test_cli.py` |
 | Composite action | `action.yml` | the `self-test` job in `.github/workflows/ci.yml` |
 
@@ -114,6 +116,14 @@ text the engine really prints — a test keeps this table honest.
 | `--publish needs GITHUB_TOKEN` | Publishing writes an issue and needs a token | Set `GITHUB_TOKEN`, or add `--dry-run` to preview |
 | `--dry-run previews publishing, so it needs --publish` | `--dry-run` only makes sense when publishing | Add `--publish`, or drop `--dry-run` |
 | `git is not on PATH` | `scripts/setup.py` needs git | Install git from <https://git-scm.com/downloads> |
+| `which is not written OWNER/NAME` | S8: an entry of `repos` is not a repository name | Write it as GitHub shows it, such as `your-name/tidewatch` |
+| `a repository belongs to one product or kernel` | S8: two products or kernels list the same repository | Keep it in the `repos` of one of them |
+| `which is not a repository pattern` | S8: an `account.ignore` entry is not `OWNER/NAME` | Write `OWNER/NAME`; `*` and `?` may stand for any characters |
+| `GitHub rejected PORTFOLIO_ACCOUNT_TOKEN` | The account token has expired or been revoked | Create a new fine-grained token and replace the secret `PORTFOLIO_ACCOUNT_TOKEN` |
+| `is a classic personal access token` | The account token is a classic one, which cannot be read-only | Create a fine-grained token with access to all repositories, and replace the secret |
+| `the token may not list the account's repositories` | The account token cannot see the account's repositories | Give it repository access "All repositories"; the read-only Metadata permission is enough |
+| `could not be told apart from other pushes` | GitHub did not show the token a repository's activity list, so any push counts there | Add the permission the message names to the token, or accept the fallback |
+| `rate limit is spent` | The account token made too many requests this hour | Nothing: the next run scans again |
 
 ## Releasing
 
