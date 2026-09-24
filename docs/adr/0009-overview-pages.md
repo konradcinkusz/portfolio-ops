@@ -79,7 +79,8 @@ before anything is written.
    - It downloads the pages from its own run with GitHub's preinstalled `gh`, which is why
      it also needs `actions: read`.
    - It replaces `overview/` and commits only when something changed.
-   - It retries the push once after a rebase, for when `main` moved meanwhile.
+   - If `main` moved on while the pages were rendered, it pushes nothing: a newer run
+     renders newer data and publishes it. Any other refusal of the push fails the job.
 
 A push made with the workflow's token starts no new run, so the jobs cannot loop. The
 overview job runs after every push to `main`, weekly and on demand, so the pages follow the
@@ -117,6 +118,9 @@ data.
     find already does.
 - **Rendering and committing in one job.** Rejected: the engine and the packages it
   installs from PyPI would run with a token that can write to the data repository.
+- **Rebasing and pushing again when `main` moved.** Rejected: pages rendered from an older
+  commit would land on top of newer data, and a rebase needs a committer identity that a
+  runner does not have.
 - **`actions/download-artifact`.** Not needed: `gh` is preinstalled on GitHub-hosted
   runners and adds no third-party code to pin.
 - **Generating the root `README.md`.** Rejected: it belongs to the owner, and a generated

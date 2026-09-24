@@ -41,8 +41,9 @@ download; the owner asked for a complete picture to browse. The data format is u
 - The action's `overview` command and output: the pages go to a directory outside the
   workspace, for an artifact. The caller workflow gains the overview job, which renders
   them with read permissions after every push to `main`, weekly and on demand, and the
-  publish-overview job, which commits them to `overview/` when they changed. The publish
-  job runs no portfolio-ops code.
+  publish-overview job, which commits them to `overview/` when they changed, and leaves
+  them to a newer run when `main` moved on meanwhile. The publish job runs no
+  portfolio-ops code.
 - In GitHub Actions, the report's header links the overview when the data repository has
   one.
 - CI renders the example overview in the action self-test and keeps it as an artifact.

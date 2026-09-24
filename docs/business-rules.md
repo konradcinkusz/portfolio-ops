@@ -65,7 +65,8 @@ portfolio-ops is a single-owner tool that runs in the owner's own repository. It
   push to `main` as well as weekly and on demand. The publish-overview job is the only job
   that may write to the repository, and it runs no portfolio-ops code: it downloads the
   pages from the run with GitHub's own `gh` and commits them to `overview/` when they
-  changed. A push made with the workflow's token starts no new run.
+  changed. If the branch moved on while the pages were rendered, it leaves them to a
+  newer run. A push made with the workflow's token starts no new run.
 
 The caller workflow a data repository carries (the template ships this shape):
 
@@ -163,6 +164,7 @@ jobs:
       - name: Commit the overview when it changed
         env:
           GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           pages="$RUNNER_TEMP/portfolio-overview"
@@ -174,7 +176,13 @@ jobs:
           git -c user.name="github-actions[bot]" \
             -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit --quiet -m "Update the portfolio overview"
-          git push --quiet || { git pull --rebase --quiet && git push --quiet; }
+          if ! git push --quiet origin "HEAD:$BRANCH"; then
+            # Refused. If the branch moved on while the pages were rendered, a newer run
+            # publishes them; any other refusal fails the job.
+            git fetch --quiet origin "$BRANCH"
+            if git merge-base --is-ancestor FETCH_HEAD HEAD^; then exit 1; fi
+            echo "::notice title=portfolio-ops::$BRANCH moved on while the pages were rendered; a newer run publishes them"
+          fi
 ```
 
 ## 4. Data model

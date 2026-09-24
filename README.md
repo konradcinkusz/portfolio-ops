@@ -158,6 +158,7 @@ jobs:
       - name: Commit the overview when it changed
         env:
           GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           pages="$RUNNER_TEMP/portfolio-overview"
@@ -169,7 +170,13 @@ jobs:
           git -c user.name="github-actions[bot]" \
             -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit --quiet -m "Update the portfolio overview"
-          git push --quiet || { git pull --rebase --quiet && git push --quiet; }
+          if ! git push --quiet origin "HEAD:$BRANCH"; then
+            # Refused. If the branch moved on while the pages were rendered, a newer run
+            # publishes them; any other refusal fails the job.
+            git fetch --quiet origin "$BRANCH"
+            if git merge-base --is-ancestor FETCH_HEAD HEAD^; then exit 1; fi
+            echo "::notice title=portfolio-ops::$BRANCH moved on while the pages were rendered; a newer run publishes them"
+          fi
 ```
 
 Pin the action to a release's full commit SHA, with its tag in a comment, or at least to

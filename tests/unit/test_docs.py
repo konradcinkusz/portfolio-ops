@@ -154,7 +154,7 @@ def test_the_standards_marketplace_is_declared() -> None:
 # new revision; implementation may change nothing but the Status and Entry point columns
 # of §6. A new revision updates these two constants in the same commit.
 SPEC_REVISION = "r5"
-SPEC_SHA256 = "e6085b8a0b963e356c2a947d40c70690d7512b12cbacc3c875aa5a3da9480ceb"
+SPEC_SHA256 = "9ceb01ec15e0bb0fc57c42f1364155b3ce2f960cf2c7a90e19b1aceee627c67c"
 CATALOGUE_ROW = re.compile(r"^\| [A-Z][0-9] \|")
 
 
