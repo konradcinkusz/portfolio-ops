@@ -28,7 +28,7 @@ from typing import IO, Any
 from portfolio_ops import __version__
 from portfolio_ops.errors import EXIT_OK, EXIT_VIOLATIONS, EnvironmentProblem, Stop
 from portfolio_ops.git import Git
-from portfolio_ops.github import API_URL, REPOSITORY, GitHubError, Transport, urllib_transport
+from portfolio_ops.github import API_URL, GitHubError, Transport, urllib_transport
 from portfolio_ops.guard import check_visibility
 from portfolio_ops.history import (
     History,
@@ -58,6 +58,7 @@ from portfolio_ops.model import (
     Diagnostic,
     Portfolio,
     Product,
+    is_repository,
 )
 from portfolio_ops.report import ReportInput
 from portfolio_ops.report.overlap import render_idea_gate
@@ -101,12 +102,8 @@ def _positive(text: str) -> int:
     return value
 
 
-def valid_repository(text: str) -> bool:
-    return bool(REPOSITORY.fullmatch(text)) and text.split("/", 1)[1].strip(".") != ""
-
-
 def _repository(text: str) -> str:
-    if valid_repository(text):
+    if is_repository(text):
         return text
     raise argparse.ArgumentTypeError(f"expected OWNER/NAME, got {text!r}")
 
@@ -479,7 +476,7 @@ def _publishing_target(args: argparse.Namespace, context: _Context) -> tuple[str
             "--publish needs to know the repository — pass --repo OWNER/NAME or set "
             "GITHUB_REPOSITORY"
         )
-    if not valid_repository(repository):
+    if not is_repository(repository):
         raise EnvironmentProblem(f"GITHUB_REPOSITORY is {repository!r}, not OWNER/NAME")
     token = context.env.get("GITHUB_TOKEN") or None
     if token is None and not args.dry_run:

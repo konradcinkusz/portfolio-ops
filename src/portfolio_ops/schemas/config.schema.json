@@ -174,6 +174,35 @@
         "type": "integer",
         "minimum": 1
       }
+    },
+    "account": {
+      "description": "The account scan (rules A1–A3), which runs only when PORTFOLIO_ACCOUNT_TOKEN is set.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ignore": {
+          "description": "Repositories that are not projects, written OWNER/NAME, where * and ? stand for any characters (rule S8); A1 leaves them out. Where a repository is named after a person, write a pattern rather than the name.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "allOf": [
+            {
+              "x-rule": "S8",
+              "uniqueItems": true,
+              "items": {
+                "pattern": "^[A-Za-z0-9*?](?:[A-Za-z0-9*?-]{0,38})/[A-Za-z0-9._*?-]{1,100}$"
+              }
+            }
+          ]
+        }
+      }
     }
   },
   "definitions": {

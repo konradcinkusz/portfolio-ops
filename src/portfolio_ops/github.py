@@ -12,7 +12,6 @@ the path and the status, nothing else (P5).
 from __future__ import annotations
 
 import json
-import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -23,7 +22,6 @@ from typing import Any
 from portfolio_ops import __version__
 
 API_URL = "https://api.github.com"
-REPOSITORY = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}")
 
 
 @dataclass(frozen=True)

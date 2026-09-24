@@ -105,7 +105,7 @@ def test_an_unknown_key_is_a_schema_error_that_lists_the_allowed_keys(tmp_path: 
         (
             "error schema products.yaml:5: unknown key 'nxt_action' in product 'alpha' — check the "
             "spelling; allowed keys: id, name, status, next_action, capabilities, feeds_from, "
-            "status_reason, review_by"
+            "status_reason, review_by, repos"
         )
     ]
 
