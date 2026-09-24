@@ -200,6 +200,7 @@ def test_report_with_a_fixed_date_is_deterministic(data_repo: GitRepo) -> None:
         "Expired claims",
         "Copy-paste debt",
         "Changes without a decision",
+        "Account activity",
         "Focus",
         "Health",
     ]

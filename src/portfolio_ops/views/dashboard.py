@@ -25,15 +25,29 @@ from importlib import resources
 from portfolio_ops.history import Clock
 from portfolio_ops.model import (
     DECISIONS_FILE,
+    NOT_SCANNED,
     PORTFOLIO,
     SEVERITIES,
+    Account,
+    AccountRepository,
+    AccountScan,
     Decision,
+    Kernel,
     Portfolio,
     Product,
     Risk,
     Term,
 )
 from portfolio_ops.report.sections import this_weeks_focus
+from portfolio_ops.rules.account import (
+    ignored,
+    inactive_work,
+    listing,
+    outside_portfolio,
+    shown,
+    unknown_repositories,
+    worked_on,
+)
 from portfolio_ops.rules.kernels import consumers, copies, kernel_state
 from portfolio_ops.views import latest_about, newest_first
 
@@ -52,6 +66,7 @@ class DashboardInput:
     clocks: Mapping[str, Clock] | None  # N1 for every active product; None without history
     last_data_commit: dt.date | None
     no_clocks: str = ""  # why there is no history to read the clocks from
+    account: Account = NOT_SCANNED  # the account scan (§7.12), or why there is none
 
 
 @dataclass(frozen=True)
@@ -255,7 +270,8 @@ def summary(view: DashboardInput) -> Panel:
             "Active",
             f"{len(_products(portfolio, 'active'))} of {thresholds.wip_limit}",
             "active products within wip_limit",
-        )
+        ),
+        _outside_the_plan(view),
     ]
     if view.clocks is None:
         tiles.append(_tile("Stale", "—", "no clocks without the git history"))
@@ -318,6 +334,19 @@ def summary(view: DashboardInput) -> Panel:
     return Panel("summary", "Summary", body)
 
 
+def _outside_the_plan(view: DashboardInput) -> str:
+    """A1 and A2: repositories worked on outside the portfolio, or on products that are not
+    active."""
+    scan = view.account.scan
+    if scan is None:
+        failed = view.account.failed
+        note = "the account scan failed" if failed else "the account is not scanned"
+        return _tile("Outside the plan", "—", note, attention=failed)
+    count = len(outside_portfolio(view.portfolio, scan)) + len(inactive_work(view.portfolio, scan))
+    note = f"repositories worked on since {_date(scan.since)}"
+    return _tile("Outside the plan", str(count), note, attention=count > 0)
+
+
 @panel(2)
 def active(view: DashboardInput) -> Panel:
     """The products in progress: next action, clock (N1, stale per N2), capabilities, kernels."""
@@ -325,27 +354,27 @@ def active(view: DashboardInput) -> Panel:
     stale_days = portfolio.config.thresholds.stale_days
     focus = this_weeks_focus(portfolio, view.today)
     products = _products(portfolio, "active")
+    scan = view.account.scan
     rows = []
     for product in products:
         pid = product.id or ""
         name = label(product.name, pid)
         if focus is not None and focus.ids[0] == pid:
             name += " " + _badge("focus", "focus")
-        rows.append(
-            (
-                name,
-                _e(product.next_action or "—"),
-                _clock(view, pid, stale_days),
-                _terms(product.capabilities),
-                _feeds(portfolio, product),
-            )
-        )
+        row = [
+            name,
+            _e(product.next_action or "—"),
+            _clock(view, pid, stale_days),
+            _terms(product.capabilities),
+            _feeds(portfolio, product),
+        ]
+        rows.append(row if scan is None else [*row, _last_push(scan, product)])
     parts = []
     if view.clocks is None:
         parts.append(f'<p class="note">The clocks are not shown: {_e(view.no_clocks)}.</p>')
     if rows:
-        headers = ("Product", "Next action", "Clock", "Capabilities", "Kernels")
-        parts.append(_table(headers, rows))
+        headers = ["Product", "Next action", "Clock", "Capabilities", "Kernels"]
+        parts.append(_table(headers if scan is None else [*headers, "Last push"], rows))
     else:
         parts.append(_empty("No product is active."))
     return Panel("active", "Active products", "\n".join(parts), len(products))
@@ -357,6 +386,20 @@ def _clock(view: DashboardInput, product_id: str, stale_days: int) -> str:
         return "—"
     stale = " " + _badge("stale", "attention") if clock.days > stale_days else ""
     return f"{_days(clock.days)}{stale}{_sub(f'since {_date(clock.since)}')}"
+
+
+def _last_push(scan: AccountScan, product: Product) -> str:
+    """The latest push to the product's repositories. A product that is not active and was
+    worked on this week stands out (A2)."""
+    by_name = {r.name.lower(): r for r in scan.repositories}
+    found = [by_name[t.value.lower()] for t in product.repos if t.value.lower() in by_name]
+    if not found:
+        return "—"
+    pushes = [r.pushed_on for r in found if r.pushed_on is not None]
+    cell = _date(max(pushes) if pushes else None)
+    if product.status != "active" and any(worked_on(r, scan) for r in found):
+        cell += " " + _badge("worked on", "attention")
+    return cell
 
 
 def _feeds(portfolio: Portfolio, product: Product) -> str:
@@ -396,17 +439,21 @@ def paused_and_dormant(view: DashboardInput) -> Panel:
         _products(view.portfolio, "paused", "dormant"),
         key=lambda p: (p.review_by or dt.date.max, p.id or ""),
     )
+    scan = view.account.scan
     rows = [
-        (
+        [
             label(p.name, p.id or ""),
             _e(p.status),
             _e(p.status_reason or "—"),
             _review(p.review_by, view.today),
             _e(p.next_action or "—"),
-        )
+            *([] if scan is None else [_last_push(scan, p)]),
+        ]
         for p in products
     ]
-    headers = ("Product", "Status", "Reason", "Review by", "Next action")
+    headers = ["Product", "Status", "Reason", "Review by", "Next action"]
+    if scan is not None:
+        headers.append("Last push")
     body = _table(headers, rows) if rows else _empty("No product is paused or dormant.")
     return Panel("waiting", "Paused and dormant", body, len(products))
 
@@ -584,3 +631,105 @@ def decisions(view: DashboardInput) -> Panel:
         text = f'\n<p class="text">{_e(decision.text)}</p>' if decision.text else ""
         parts.append(f'<article class="decision">\n{heading}{text}\n</article>')
     return Panel("decisions", "Latest decisions", "\n".join(parts), len(every))
+
+
+@panel(11)
+def repositories(view: DashboardInput) -> Panel:
+    """The account's repositories (§7.12), each with the product or kernel that lists it,
+    the latest push first. Work outside the plan stands out (A1, A2)."""
+    account, portfolio = view.account, view.portfolio
+    scan = account.scan
+    if scan is None:
+        text = f"The account was not scanned: {account.problem}."
+        tone = "attention" if account.failed else ""
+        body = f'<p class="note">{_badge("not scanned", tone)} {_e(text)}</p>'
+        return Panel("repositories", "Repositories", body)
+    listed = listing(portfolio)
+    outside = {w.repository.name for w in outside_portfolio(portfolio, scan)}
+    inactive = {w.repository.name for w in inactive_work(portfolio, scan)}
+    every = [r for r in shown(scan) if r.name.lower() in listed or not (r.fork or r.archived)]
+    every.sort(key=lambda r: (r.pushed_on is None, -_ordinal(r.pushed_on), r.name.lower()))
+    worked = sum(1 for r in every if worked_on(r, scan) is not None)
+    notes = [
+        (
+            f"{_counted_repositories(len(every))} of {scan.login}, the latest push first; your "
+            f"activity since {scan.since} is in {worked} of them. Forks and archived "
+            "repositories appear when repos lists them."
+        )
+    ]
+    unreadable = sum(1 for r in every if r.activity == "unreadable")
+    if unreadable:
+        notes.append(
+            f"Your activity could not be told apart from other pushes in "
+            f"{_counted_repositories(unreadable)}: {scan.unreadable}. There, a push by anyone "
+            "counts."
+        )
+    if scan.hide_private:
+        notes.append("allow_public is set, so private repositories are left out.")
+    parts = [f'<p class="note">{_e(note)}</p>' for note in notes]
+    unknown = unknown_repositories(portfolio, scan)
+    if unknown:
+        names = ", ".join(
+            f"{_code(u.term.value)} ({label(u.owner.name, u.owner.id or '')})" for u in unknown
+        )
+        parts.append(
+            f'<p class="note">{_badge("not found", "attention")} Listed in repos, but not in '
+            f"the account: {names}.</p>"
+        )
+    rows = [
+        (
+            _repository_name(r),
+            _in_portfolio(view, r, listed, r.name in outside),
+            _date(r.pushed_on),
+            _activity(r, scan, r.name in inactive),
+        )
+        for r in every
+    ]
+    headers = ("Repository", "In the portfolio", "Last push", "Your activity this week")
+    parts.append(_table(headers, rows) if rows else _empty("The account has no repository."))
+    return Panel("repositories", "Repositories", "\n".join(parts), len(rows))
+
+
+def _ordinal(day: dt.date | None) -> int:
+    return day.toordinal() if day is not None else 0
+
+
+def _counted_repositories(count: int) -> str:
+    return "1 repository" if count == 1 else f"{count} repositories"
+
+
+def _repository_name(repository: AccountRepository) -> str:
+    badges = [
+        _badge(kind)
+        for kind, flag in (("fork", repository.fork), ("archived", repository.archived))
+        if flag
+    ]
+    return " ".join([_code(repository.name), *badges])
+
+
+def _in_portfolio(
+    view: DashboardInput,
+    repository: AccountRepository,
+    listed: Mapping[str, Product | Kernel],
+    outside: bool,
+) -> str:
+    owner = listed.get(repository.name.lower())
+    if isinstance(owner, Product):
+        return f"{label(owner.name, owner.id or '')} {_badge(owner.status or '')}"
+    if owner is not None:
+        return f"{label(owner.name, owner.id or '')} {_badge('kernel')}"
+    if ignored(view.portfolio, repository.name):
+        return _badge("ignored")
+    return "— " + _badge("outside", "attention") if outside else "—"
+
+
+def _activity(repository: AccountRepository, scan: AccountScan, inactive: bool) -> str:
+    day = worked_on(repository, scan)
+    if day is None:
+        return "—"
+    cell = _date(day)
+    if inactive:
+        cell += " " + _badge("not active", "attention")
+    if repository.activity == "unreadable":
+        cell += _sub("a push by anyone")
+    return cell

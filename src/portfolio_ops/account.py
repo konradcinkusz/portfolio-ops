@@ -17,19 +17,17 @@ from collections.abc import Mapping
 from dataclasses import replace
 
 from portfolio_ops.github import API_URL, GitHubClient, GitHubError, Transport
-from portfolio_ops.model import Account, AccountRepository, AccountScan
+from portfolio_ops.model import (
+    ACCOUNT_TOKEN,
+    NOT_SCANNED,
+    Account,
+    AccountRepository,
+    AccountScan,
+)
 from portfolio_ops.rules.account import window_start
 
-ACCOUNT_TOKEN = "PORTFOLIO_ACCOUNT_TOKEN"  # noqa: S105 — the variable's name, not a token
 CLASSIC_PREFIX = "ghp_"  # a classic personal access token; fine-grained ones differ
 NEXT_RUN = "the next run scans again"
-
-NOT_SCANNED = Account(
-    problem=(
-        f"{ACCOUNT_TOKEN} is not set — the scan is optional; the portfolio-ops README says "
-        "how to set it up"
-    )
-)
 
 
 def utc_date(stamp: str | None) -> dt.date | None:

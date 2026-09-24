@@ -29,6 +29,7 @@ SECTION_ORDER = [
     "Expired claims",
     "Copy-paste debt",
     "Changes without a decision",
+    "Account activity",
     "Focus",
     "Health",
 ]

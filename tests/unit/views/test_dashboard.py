@@ -7,8 +7,11 @@ import datetime as dt
 import hashlib
 import re
 from collections.abc import Callable
+from dataclasses import replace
 
-from helpers import FIXTURES
+from helpers import FIXTURES, TODAY
+from portfolio_ops.model import Account, AccountRepository, AccountScan
+from portfolio_ops.rules.account import window_start
 from portfolio_ops.views.dashboard import PANELS, PRIVATE_NOTE, DashboardInput, render_dashboard
 
 BuildView = Callable[..., DashboardInput]
@@ -228,7 +231,7 @@ def test_the_panels_are_registered_in_a_fixed_order_and_linked_from_the_top(
     page = render_dashboard(view())
     anchors = [PANELS[position](view()).anchor for position in sorted(PANELS)]
 
-    assert sorted(PANELS) == list(range(1, 11))
+    assert sorted(PANELS) == list(range(1, 12))
     assert len(set(anchors)) == len(anchors)
     assert [page.index(f'<section id="{a}"') for a in anchors] == sorted(
         page.index(f'<section id="{a}"') for a in anchors
@@ -254,3 +257,131 @@ def test_the_same_input_renders_the_same_bytes(view: BuildView) -> None:
     data = view(BUSY, clocks={"alpha": "2026-08-01"})
 
     assert render_dashboard(data) == render_dashboard(data)
+
+
+# ------------------------------------------------------------------ the account (§7.12)
+
+# BUSY with repositories: alpha's is worked on, beta (paused) was worked on this week, the
+# kernel has one, and gamma lists one the account does not have.
+WITH_REPOS = BUSY | {
+    "products.yaml": BUSY["products.yaml"]
+    .replace(
+        "            name: Alpha\n",
+        "            name: Alpha\n            repos: [example-owner/alpha]\n",
+    )
+    .replace(
+        "            name: Beta\n",
+        "            name: Beta\n            repos: [example-owner/beta]\n",
+    )
+    .replace(
+        "            name: Gamma\n",
+        "            name: Gamma\n            repos: [example-owner/gamma-renamed]\n",
+    ),
+    "config.yaml": (FIXTURES / "valid" / "config.yaml").read_text()
+    + "account:\n  ignore: [example-owner/dotfiles]\n",
+}
+
+
+def repository(
+    name: str,
+    pushed: str | None,
+    worked: str | None = None,
+    *,
+    fork: bool = False,
+    archived: bool = False,
+    unreadable: bool = False,
+) -> AccountRepository:
+    pushed_on = dt.date.fromisoformat(pushed) if pushed else None
+    if unreadable:
+        return AccountRepository(
+            f"example-owner/{name}", True, fork, archived, pushed_on, "unreadable"
+        )
+    activity = "read" if pushed_on and pushed_on >= window_start(TODAY) else "unchecked"
+    owner = dt.date.fromisoformat(worked) if worked else None
+    return AccountRepository(
+        f"example-owner/{name}", True, fork, archived, pushed_on, activity, owner
+    )
+
+
+SCANNED = Account(
+    scan=AccountScan(
+        "example-owner",
+        window_start(TODAY),
+        TODAY,
+        (
+            repository("alpha", "2026-09-21", "2026-09-21"),
+            repository("beta", "2026-09-19", "2026-09-18"),
+            repository("side-quest", "2026-09-20", "2026-09-20"),
+            repository("weekend-jam", "2026-09-17", unreadable=True),
+            repository("dotfiles", "2026-09-16", "2026-09-16"),
+            repository("core", "2026-09-10"),
+            repository("bot-only", "2026-09-21"),  # Dependabot pushed, the owner did not
+            repository("old-fork", "2026-09-21", fork=True),
+            repository("shelved", "2025-01-01", archived=True),
+            repository("never-pushed", None),
+        ),
+        unreadable="the token cannot read the repositories' activity lists (HTTP 403)",
+    )
+)
+
+
+def test_a_scanned_account_matches_its_golden_page(view: BuildView, golden: Golden) -> None:
+    data = replace(
+        view(WITH_REPOS, clocks={"alpha": "2026-08-01", "epsilon": "2026-09-14"}), account=SCANNED
+    )
+
+    golden("dashboard-account.html", render_dashboard(data))
+
+
+def test_work_outside_the_plan_stands_out(view: BuildView) -> None:
+    page = render_dashboard(replace(view(WITH_REPOS), account=SCANNED))
+
+    for marker in (
+        '<div class="tile attention"><dt>Outside the plan</dt><dd class="value">3</dd>',
+        (
+            '<code>example-owner/side-quest</code></td><td>— <span class="badge attention">'
+            "outside</span>"
+        ),
+        '<span class="badge attention">not active</span>',
+        '<span class="badge attention">worked on</span>',
+        (
+            '<span class="badge attention">not found</span> Listed in repos, but not in the '
+            "account: <code>example-owner/gamma-renamed</code> (Gamma <code>gamma</code>)."
+        ),
+        '<code>example-owner/dotfiles</code></td><td><span class="badge">ignored</span>',
+        '<span class="sub">a push by anyone</span>',
+    ):
+        assert marker in page, marker
+    assert "old-fork" not in page
+    assert "shelved" not in page
+
+
+def test_without_a_scan_the_panel_says_why_and_the_products_have_no_push_column(
+    view: BuildView,
+) -> None:
+    page = render_dashboard(view(BUSY))
+
+    assert (
+        '<p class="note"><span class="badge">not scanned</span> The account was not scanned: '
+        "PORTFOLIO_ACCOUNT_TOKEN is not set — the scan is optional; the portfolio-ops README "
+        "says how to set it up.</p>"
+    ) in page
+    assert '<dt>Outside the plan</dt><dd class="value">—</dd>' in page
+    assert "Last push" not in page
+
+
+def test_a_failed_scan_stands_out(view: BuildView) -> None:
+    failed = Account(problem="GitHub rejected it — replace it", failed=True)
+
+    page = render_dashboard(replace(view(), account=failed))
+
+    assert '<span class="badge attention">not scanned</span>' in page
+    assert '<div class="tile attention"><dt>Outside the plan</dt>' in page
+
+
+def test_with_allow_public_no_private_repository_is_named(view: BuildView) -> None:
+    hidden = replace(SCANNED.scan, hide_private=True) if SCANNED.scan else None
+    page = render_dashboard(replace(view(WITH_REPOS), account=Account(scan=hidden)))
+
+    assert "side-quest" not in page
+    assert "allow_public is set, so private repositories are left out." in page

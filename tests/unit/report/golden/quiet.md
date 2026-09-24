@@ -30,6 +30,10 @@ No copy-paste debt: no product carries a copy of a kernel.
 
 Every status and state change since 2026-09-15 has its decision.
 
+## Account activity
+
+The account was not scanned: PORTFOLIO_ACCOUNT_TOKEN is not set — the scan is optional; the portfolio-ops README says how to set it up.
+
 ## Focus
 
 - This week: Alpha (`alpha`), recorded 2026-09-21.
@@ -42,4 +46,5 @@ Every status and state change since 2026-09-15 has its decision.
 - Stale products: 0
 - Focus completion: 0 of the last 1 evaluated focus decisions done
 - Kernels: 0 done, 1 extracted, 0 planned
+- Account: not scanned
 - Last commit touching the data: 2026-09-20

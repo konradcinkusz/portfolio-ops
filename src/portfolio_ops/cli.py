@@ -1,6 +1,7 @@
 """The command line: ``validate`` and ``report`` (spec §7.6), the gates ``gate`` and
 ``idea-gate`` (§6 B1–B6), ``lookup`` (P3), the views ``dashboard`` (V1) and ``export``
-(V2), and the exit codes of §7.7.
+(V2), and the exit codes of §7.7. ``report`` and ``dashboard`` also scan the account when
+``PORTFOLIO_ACCOUNT_TOKEN`` is set (§7.12).
 
 Every command runs in the order of §7.3: read config.yaml, check ``schema_version``
 (S6), run the visibility guard (S7), then everything else. Every command but
@@ -26,10 +27,11 @@ from pathlib import Path
 from typing import IO, Any
 
 from portfolio_ops import __version__
+from portfolio_ops.account import read_account
 from portfolio_ops.errors import EXIT_OK, EXIT_VIOLATIONS, EnvironmentProblem, Stop
 from portfolio_ops.git import Git
 from portfolio_ops.github import API_URL, GitHubError, Transport, urllib_transport
-from portfolio_ops.guard import check_visibility
+from portfolio_ops.guard import check_visibility, github_repository
 from portfolio_ops.history import (
     History,
     NoPreviousCommit,
@@ -55,6 +57,7 @@ from portfolio_ops.model import (
     FINDINGS_FILE,
     PORTFOLIO,
     PRODUCTS_FILE,
+    Account,
     Diagnostic,
     Portfolio,
     Product,
@@ -65,6 +68,7 @@ from portfolio_ops.report.overlap import render_idea_gate
 from portfolio_ops.report.publish import publish
 from portfolio_ops.report.render import render, render_invalid
 from portfolio_ops.rules import CATALOGUE, validate
+from portfolio_ops.rules.account import listing
 from portfolio_ops.rules.changes import check_changes
 from portfolio_ops.rules.gates import gate, idea_gate, run_gate, run_idea_gate
 from portfolio_ops.rules.memory import lookup
@@ -370,7 +374,8 @@ def diagnose(loaded: Loaded, today: dt.date) -> list[Diagnostic]:
 
 
 def _count(number: int, noun: str) -> str:
-    return f"{number} {noun}" if number == 1 else f"{number} {noun}s"
+    plural = f"{noun[:-1]}ies" if noun.endswith("y") else f"{noun}s"
+    return f"{number} {noun}" if number == 1 else f"{number} {plural}"
 
 
 def _validate(args: argparse.Namespace, context: _Context) -> int:
@@ -439,6 +444,7 @@ def _report(args: argparse.Namespace, context: _Context) -> int:
                 next_action_since=history.next_action_since,
                 last_data_commit=history.last_data_commit,
                 changes=history.changes,
+                account=_account(data, portfolio, today, context),
             )
         )
     context.out.write(rendered.markdown)
@@ -456,6 +462,30 @@ def _report(args: argparse.Namespace, context: _Context) -> int:
         except GitHubError as exc:
             raise EnvironmentProblem(f"publishing to {repository} failed: {exc}") from exc
     return EXIT_VIOLATIONS if errors else EXIT_OK
+
+
+def _account(data: DataDir, portfolio: Portfolio, today: dt.date, context: _Context) -> Account:
+    """The account scan of report and dashboard (§7.12): it leaves out the data repository,
+    and with allow_public it names no private repository. It never changes the exit code."""
+    left_out = context.env.get("GITHUB_REPOSITORY") or github_repository(
+        Git(data.root).origin_url()
+    )
+    account = read_account(
+        context.env,
+        context.transport,
+        today=today,
+        listed=frozenset(listing(portfolio)),
+        left_out=left_out or None,
+        hide_private=portfolio.config.allow_public,
+    )
+    if account.failed:
+        context.err.write(f"warning: the account was not scanned: {account.problem}\n")
+    elif account.scan is not None:
+        context.err.write(
+            f"note: the account scan read {_count(len(account.scan.repositories), 'repository')} "
+            f"of {account.scan.login}\n"
+        )
+    return account
 
 
 def _history_warning(context: _Context) -> Callable[[str, str], None]:
@@ -662,6 +692,7 @@ def _dashboard(args: argparse.Namespace, context: _Context) -> int:
             clocks=clocks(portfolio, history, today) if history else None,
             last_data_commit=history.last_data_commit if history else None,
             no_clocks=missing,
+            account=_account(data, portfolio, today, context),
         )
     )
     where = _write_output(args.output, page, context)

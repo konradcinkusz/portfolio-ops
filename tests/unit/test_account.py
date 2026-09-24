@@ -12,8 +12,8 @@ from typing import Any
 import pytest
 
 from helpers import TODAY, FakeGitHub
-from portfolio_ops.account import ACCOUNT_TOKEN, NOT_SCANNED, read_account, utc_date
-from portfolio_ops.model import Account, AccountRepository
+from portfolio_ops.account import read_account, utc_date
+from portfolio_ops.model import ACCOUNT_TOKEN, NOT_SCANNED, Account, AccountRepository
 
 TOKEN = "github_pat_example_not_a_real_token"  # noqa: S105 — invented
 LOGIN = "example-owner"

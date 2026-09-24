@@ -287,6 +287,16 @@ class Account:
     failed: bool = False
 
 
+# The environment variable that holds the account token (§7.12), and the account without it.
+ACCOUNT_TOKEN = "PORTFOLIO_ACCOUNT_TOKEN"  # noqa: S105 — the variable's name, not a token
+NOT_SCANNED = Account(
+    problem=(
+        f"{ACCOUNT_TOKEN} is not set — the scan is optional; the portfolio-ops README says "
+        "how to set it up"
+    )
+)
+
+
 @dataclass(frozen=True)
 class Thresholds:
     stale_days: int = 30

@@ -210,6 +210,7 @@ def test_health_reports_the_measures_of_section_10(build: Build) -> None:
         "- Stale products: 1",
         "- Focus completion: 3 of the last 4 evaluated focus decisions done",
         "- Kernels: 0 done, 1 extracted, 0 planned",
+        "- Account: not scanned",
         "- Last commit touching the data: 2026-09-20",
     )
 
