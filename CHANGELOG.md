@@ -13,6 +13,29 @@ links point at the commits they describe.
 
 ## [Unreleased]
 
+## [0.4.1] — 2026-09-24
+
+The first scan of a real account read only its public repositories, and said nothing:
+the token had GitHub's default repository access, "Public repositories". The
+[business rules](docs/business-rules.md) are at revision r4 (§7.12, Coverage).
+
+### Added
+
+- The scan checks what the token sees. When the account's private data repository is not
+  among the repositories the token lists, the weekly issue shows one item: the token
+  sees only public repositories, and its repository access should be "All repositories".
+  The dashboard shows the same as a note, and Health says "public repositories only".
+- The report's Account activity section and the dashboard's Repositories panel count the
+  public and the private repositories they read. The panel marks each private
+  repository.
+- In GitHub Actions, the report's header links the workflow run whose artifacts hold the
+  dashboard, so the weekly issue leads to the page.
+
+### Changed
+
+- ADR 0008 is accepted with phase 4, and records the coverage check.
+- The README warns that GitHub preselects "Public repositories" for a new token.
+
 ## [0.4.0] — 2026-09-24
 
 Phase 4 of the [business rules](docs/business-rules.md) (§9.5), and their revision r3: the
@@ -167,7 +190,8 @@ Phase 1 of the [business rules](docs/business-rules.md), revision r1 (§9.1).
   dependency audit, secret scan, action self-test), CodeQL, a tag-driven release workflow,
   Dependabot, templates and ADRs 0001–0004.
 
-[Unreleased]: https://github.com/konradcinkusz/portfolio-ops/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/konradcinkusz/portfolio-ops/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/konradcinkusz/portfolio-ops/releases/tag/v0.4.1
 [0.4.0]: https://github.com/konradcinkusz/portfolio-ops/releases/tag/v0.4.0
 [0.3.0]: https://github.com/konradcinkusz/portfolio-ops/releases/tag/v0.3.0
 [0.2.0]: https://github.com/konradcinkusz/portfolio-ops/tree/7c55fb2

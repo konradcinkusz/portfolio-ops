@@ -122,6 +122,7 @@ text the engine really prints — a test keeps this table honest.
 | `GitHub rejected PORTFOLIO_ACCOUNT_TOKEN` | The account token has expired or been revoked | Create a new fine-grained token and replace the secret `PORTFOLIO_ACCOUNT_TOKEN` |
 | `is a classic personal access token` | The account token is a classic one, which cannot be read-only | Create a fine-grained token with access to all repositories, and replace the secret |
 | `the token may not list the account's repositories` | The account token cannot see the account's repositories | Give it repository access "All repositories"; the read-only Metadata permission is enough |
+| `The token sees only public repositories` | The account token was created with repository access "Public repositories", GitHub's default, so no private repository is scanned | Edit the token on GitHub and set its repository access to "All repositories"; the secret stays the same |
 | `could not be told apart from other pushes` | GitHub did not show the token a repository's activity list, so any push counts there | Add the permission the message names to the token, or accept the fallback |
 | `rate limit is spent` | The account token made too many requests this hour | Nothing: the next run scans again |
 

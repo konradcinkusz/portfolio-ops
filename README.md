@@ -44,7 +44,7 @@ the rules and prints nothing when it is valid. `report` prints this week's revie
 Markdown. `dashboard` writes the whole portfolio as one page to open in a browser.
 
 To install a release without cloning:
-`pipx install git+https://github.com/konradcinkusz/portfolio-ops@v0.4.0`.
+`pipx install git+https://github.com/konradcinkusz/portfolio-ops@v0.4.1`.
 
 ## Using it for your own portfolio
 
@@ -153,8 +153,9 @@ names three things:
 - products that are not active, but were worked on;
 - repositories your `repos` lists that the account does not have.
 
-The dashboard gains a Repositories panel with every repository, the product or kernel it
-belongs to, and its latest push. Pushes by Dependabot or other bots do not count as your
+The dashboard gains a Repositories panel with every repository, public and private, the
+product or kernel it belongs to, and its latest push. The weekly issue links the workflow
+run whose artifacts hold that dashboard. Pushes by Dependabot or other bots do not count as your
 work. The scan is optional: without the token everything works as before, and the issue
 says the account was not scanned.
 
@@ -164,7 +165,9 @@ To set it up:
    tokens → Generate new token**.
    - **Resource owner:** your account.
    - **Expiration:** a date you will remember, for example a year ahead.
-   - **Repository access:** All repositories.
+   - **Repository access:** All repositories. GitHub preselects "Public repositories",
+     which leaves every private repository out of the scan; the weekly issue says so when
+     that happens.
    - **Permissions:** nothing to add. The read-only `Metadata` permission every token has
      is what the scan uses.
 2. In your data repository, open **Settings → Secrets and variables → Actions → New
@@ -222,7 +225,7 @@ The JSON Schemas let an editor check a file as you type. With the YAML extension
 VS Code, for example, put this on the first line of `products.yaml`:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/konradcinkusz/portfolio-ops/v0.4.0/src/portfolio_ops/schemas/products.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/konradcinkusz/portfolio-ops/v0.4.1/src/portfolio_ops/schemas/products.schema.json
 ```
 
 ## Commands
