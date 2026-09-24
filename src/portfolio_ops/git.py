@@ -75,8 +75,9 @@ class Git:
                 commits.append(Commit(sha, _utc_date(int(stamp))))
         return commits
 
-    def last_commit(self, pathspec: str) -> dt.date | None:
-        out = self._text("log", "-1", "--format=%ct", "--", pathspec)
+    def last_commit(self, *pathspecs: str) -> dt.date | None:
+        """The committer date of the latest commit that touched ``pathspecs``."""
+        out = self._text("log", "-1", "--format=%ct", "--", *pathspecs)
         return _utc_date(int(out)) if out and out.isdigit() else None
 
     def blobs(self, sha_paths: list[str]) -> list[bytes | None]:

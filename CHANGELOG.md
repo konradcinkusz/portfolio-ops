@@ -13,6 +13,48 @@ links point at the commits they describe.
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-09-24
+
+Phase 5 of the [business rules](docs/business-rules.md) (§9.6), and their revision r5: the
+overview. The weekly issue lists only what needs the owner and the dashboard is a file to
+download; the owner asked for a complete picture to browse. The data format is unchanged —
+`schema_version` stays 1.
+
+### Added
+
+- **The overview** (V3, §7.11, [ADR 0009](docs/adr/0009-overview-pages.md)):
+  `portfolio-ops overview` writes the whole portfolio as five linked Markdown pages, which
+  GitHub renders in the private data repository, on the web and in its mobile app:
+  - `README.md`: the numbers at a glance, what needs attention, this week's focus and next
+    actions, where the week's work went as a Mermaid pie, and the latest decisions
+  - `products.md`: every product by status and every kernel, with the review dates on a
+    Mermaid timeline
+  - `repositories.md`: the account's repositories, those worked on this week first
+  - `risks.md`: the risks, the findings and the copy-paste debt
+  - `decisions.md`: every decision, newest first, with its text
+
+  Like the dashboard it shows state and decides nothing, reads the history and scans the
+  account when it can, and works without either. Every value from the data is escaped,
+  and a Mermaid label keeps only letters, digits, spaces and a few safe marks. It writes
+  to `overview/` in the data directory, or to `--output DIR`, and never overwrites a file
+  it did not write.
+- The action's `overview` command and output: the pages go to a directory outside the
+  workspace, for an artifact. The caller workflow gains the overview job, which renders
+  them with read permissions after every push to `main`, weekly and on demand, and the
+  publish-overview job, which commits them to `overview/` when they changed, and leaves
+  them to a newer run when `main` moved on meanwhile. The publish job runs no
+  portfolio-ops code.
+- In GitHub Actions, the report's header links the overview when the data repository has
+  one.
+- CI renders the example overview in the action self-test and keeps it as an artifact.
+
+### Changed
+
+- "Last commit touching the data" in the report's Health leaves `overview/` aside, so the
+  workflow's commits of the overview do not count as the owner's.
+- The account scan also runs for `overview`, and the action passes `account-token` to it.
+- ADR 0007 is amended: the Markdown view it rejected is now the overview.
+
 ## [0.4.1] — 2026-09-24
 
 The first scan of a real account read only its public repositories, and said nothing:
@@ -190,7 +232,8 @@ Phase 1 of the [business rules](docs/business-rules.md), revision r1 (§9.1).
   dependency audit, secret scan, action self-test), CodeQL, a tag-driven release workflow,
   Dependabot, templates and ADRs 0001–0004.
 
-[Unreleased]: https://github.com/konradcinkusz/portfolio-ops/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/konradcinkusz/portfolio-ops/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/konradcinkusz/portfolio-ops/releases/tag/v0.5.0
 [0.4.1]: https://github.com/konradcinkusz/portfolio-ops/releases/tag/v0.4.1
 [0.4.0]: https://github.com/konradcinkusz/portfolio-ops/releases/tag/v0.4.0
 [0.3.0]: https://github.com/konradcinkusz/portfolio-ops/releases/tag/v0.3.0

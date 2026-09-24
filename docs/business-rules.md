@@ -1,6 +1,6 @@
 # portfolio-ops — business rules
 
-> **Status:** specification, revision **r4**, 2026-09-24.
+> **Status:** specification, revision **r5**, 2026-09-24.
 > The source of truth for the engine's behaviour. Master prompts in `docs/delivery/` are
 > generated from this document. When code, a prompt and this document disagree, this
 > document wins and the disagreement is a finding. During implementation only the
@@ -18,7 +18,7 @@ constraint is the owner's attention. It has four functions:
 | Gates | Is it safe to make this external move, or to start this new idea? |
 | Memory | What has already been decided and verified, so that nothing is worked out twice? |
 
-Dashboards and exports are views: they show state and contain no rules.
+Dashboards, the overview and exports are views: they show state and contain no rules.
 
 The account scan (§7.12) checks the limit against where the work actually goes: it reports
 the repositories of the owner's GitHub account that were worked on outside the active
@@ -58,9 +58,15 @@ portfolio-ops is a single-owner tool that runs in the owner's own repository. It
 - The template's copy of the caller workflow skips every job in the template repository
   itself: the template is public and holds only examples, and S7 would refuse it. In a
   repository created from the template that condition always holds.
-- The report and dashboard jobs pass the account token (§7.12) from the secret
+- The report, dashboard and overview jobs pass the account token (§7.12) from the secret
   `PORTFOLIO_ACCOUNT_TOKEN`. Without that secret the input is empty and the account is
   not scanned; the validate job never receives it.
+- The overview job renders the overview's pages (§7.11) with read permissions, after every
+  push to `main` as well as weekly and on demand. The publish-overview job is the only job
+  that may write to the repository, and it runs no portfolio-ops code: it downloads the
+  pages from the run with GitHub's own `gh` and commits them to `overview/` when they
+  changed. If the branch moved on while the pages were rendered, it leaves them to a
+  newer run. A push made with the workflow's token starts no new run.
 
 The caller workflow a data repository carries (the template ships this shape):
 
@@ -123,6 +129,60 @@ jobs:
           name: portfolio-dashboard
           path: ${{ steps.portfolio.outputs.dashboard }}
           retention-days: 7
+
+  overview:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@<full-commit-sha>   # vX.Y.Z
+        with:
+          fetch-depth: 0
+      - id: portfolio
+        uses: konradcinkusz/portfolio-ops@<full-commit-sha>   # vX.Y.Z
+        with:
+          command: overview
+          account-token: ${{ secrets.PORTFOLIO_ACCOUNT_TOKEN }}
+      - uses: actions/upload-artifact@<full-commit-sha>   # vX.Y.Z
+        with:
+          name: portfolio-overview
+          path: ${{ steps.portfolio.outputs.overview }}
+          retention-days: 1
+
+  publish-overview:
+    needs: overview
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    concurrency:
+      group: publish-overview
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@<full-commit-sha>   # vX.Y.Z
+      - name: Commit the overview when it changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          pages="$RUNNER_TEMP/portfolio-overview"
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name portfolio-overview --dir "$pages"
+          rm -rf overview && mkdir overview && cp "$pages"/*.md overview/
+          git add --all overview
+          if git diff --cached --quiet; then echo "The overview is current."; exit 0; fi
+          git -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --quiet -m "Update the portfolio overview"
+          if ! git push --quiet origin "HEAD:$BRANCH"; then
+            # Refused. If the branch moved on while the pages were rendered, a newer run
+            # publishes them; any other refusal fails the job.
+            git fetch --quiet origin "$BRANCH"
+            if git merge-base --is-ancestor FETCH_HEAD HEAD^; then exit 1; fi
+            echo "::notice title=portfolio-ops::$BRANCH moved on while the pages were rendered; a newer run publishes them"
+          fi
 ```
 
 ## 4. Data model
@@ -310,6 +370,7 @@ A account.
 | P3 | Before a new check, look up (`subject`, `type`): reuse a valid finding; re-check and update an expired one (§7.10) | `lookup`, procedure | — | 2 | implemented (v0.2.0) | `portfolio_ops.rules.memory.lookup` |
 | V1 | Dashboard: static HTML generated from the data; for a private data repository never published to GitHub Pages — a workflow artifact or a local file (§7.11) | `dashboard` | — | 3 | implemented (v0.3.0) | `portfolio_ops.views.dashboard.render_dashboard` |
 | V2 | Context export: size-bounded Markdown for LLM sessions — active and paused products with their next actions, open risks of severity `medium` or higher, the latest decisions, the capability vocabulary (§7.11) | `export` | — | 3 | implemented (v0.3.0) | `portfolio_ops.views.export.render_export` |
+| V3 | Overview: Markdown pages generated from the data, its history and the account scan, committed by the workflow to `overview/` in the private data repository, where GitHub renders them; never published to GitHub Pages (§7.11) | `overview` | — | 5 | implemented (v0.5.0) | `portfolio_ops.views.overview.render_overview` |
 | A1 | A repository of the account with the owner's activity in the window (§7.12) is listed by no product or kernel, and `account.ignore` does not match it | `report` | item under Account activity — add it to the `repos` of its product or kernel, registering a new product as an idea, or ignore it | 4 | implemented (v0.4.0) | `portfolio_ops.rules.account.outside_portfolio` |
 | A2 | A repository listed by a product that is not `active` has the owner's activity in the window | `report` | item under Account activity — make the product active within the limit, with its decision, or stop working on it | 4 | implemented (v0.4.0) | `portfolio_ops.rules.account.inactive_work` |
 | A3 | A repository in `repos` whose owner is the account is not among the account's repositories | `report` | item under Account activity — correct the name, or remove it | 4 | implemented (v0.4.0) | `portfolio_ops.rules.account.unknown_repositories` |
@@ -324,7 +385,7 @@ value of `--today`. Git commit times are the committer timestamps, converted to 
 ### 7.2 The clock (N1)
 
 - Only `report` needs git history. `validate` reads it when it is there, for P1 (§7.9), and
-  so does `dashboard`, for the clocks (§7.11); both work on any directory.
+  so do `dashboard` and `overview`, for the clocks (§7.11); all three work on any directory.
 - The engine reads the commits that touched `<path>/products.yaml`, newest first, and parses
   each version. A version that fails to parse is skipped with a warning.
 - Values are compared per product id after parsing, so reordering products, reformatting,
@@ -356,8 +417,8 @@ value of `--today`. Git commit times are the committer timestamps, converted to 
 ### 7.4 The report (R2, R3)
 
 The report is Markdown on standard output. Its header names the date, and in GitHub Actions
-it links the workflow run, whose artifacts hold the dashboard (§3). Its sections come in
-this order:
+it links the workflow run, whose artifacts hold the dashboard, and the overview (§3,
+§7.11). Its sections come in this order:
 
 1. **Validation errors** — only when validation fails. The other sections are then left out
    with a one-line note, and the command exits 1.
@@ -389,7 +450,7 @@ this order:
     evaluated `focus` decisions; the number of kernels in each state (K1); the repositories
     with the owner's activity in the window and how many of them are outside the portfolio,
     when the account was scanned; the date of the last commit that touched the data
-    directory.
+    directory, the overview's pages aside.
 
 The report **has items** when any of sections 1–9 is non-empty or no focus is recorded this
 week.
@@ -419,16 +480,18 @@ These are the public contract and freeze at v1.0.0 (§9.4).
 - `portfolio-ops lookup SUBJECT TYPE [--path DIR] [--today YYYY-MM-DD]`
 - `portfolio-ops dashboard [--path DIR] [--today YYYY-MM-DD] [--output FILE]`
 - `portfolio-ops export [--path DIR] [--today YYYY-MM-DD] [--max-chars N]`
+- `portfolio-ops overview [--path DIR] [--today YYYY-MM-DD] [--output DIR]`
 - `portfolio-ops --version`
-- Composite action (`action.yml`) inputs: `command` (`validate`, `report` or `dashboard`,
-  required), `path` (default `.`), `publish` (default `false`), `dry-run` (default
+- Composite action (`action.yml`) inputs: `command` (`validate`, `report`, `dashboard` or
+  `overview`, required), `path` (default `.`), `publish` (default `false`), `dry-run` (default
   `false`), `github-token` (default: the workflow's token), `account-token` (default:
   empty — the account is not scanned), `python-version` (default: the newest supported
-  version). Output: `dashboard`, with `command: dashboard` — the path of the page, outside
-  the workspace.
+  version). Outputs: `dashboard`, with `command: dashboard` — the path of the page — and
+  `overview`, with `command: overview` — the directory of its pages; both outside the
+  workspace.
 - Environment: `GITHUB_TOKEN` and `GITHUB_REPOSITORY` for the guard (§7.3) and publishing
-  (§7.5); `PORTFOLIO_ACCOUNT_TOKEN` for the account scan of `report` and `dashboard`
-  (§7.12). The action passes `account-token` to those two commands only.
+  (§7.5); `PORTFOLIO_ACCOUNT_TOKEN` for the account scan of `report`, `dashboard` and
+  `overview` (§7.12). The action passes `account-token` to those three commands only.
 
 ### 7.7 Exit codes
 
@@ -506,6 +569,21 @@ The troubleshooting table in `CONTRIBUTING.md` is keyed on these messages.
   repository, or on a shallow clone — it leaves out the clocks and says why. In the
   composite action it is written outside the workspace, and the output `dashboard` holds
   its path for a workflow artifact.
+- **The overview** (V3) is a set of Markdown pages that GitHub renders in the private data
+  repository, with links between them and Mermaid charts:
+  - `README.md`, the home page: the numbers at a glance, what needs attention, this week's
+    focus and next actions, where the week's work went, and the latest decisions;
+  - `products.md`: every product by status and every kernel, with the review dates of the
+    paused and dormant products on a timeline;
+  - `repositories.md`: the account's repositories (§7.12), those worked on in the window
+    first, each with its product or kernel;
+  - `risks.md`: the risks, the findings and the copy-paste debt;
+  - `decisions.md`: every decision, newest first, with its text.
+
+  Every value from the data is escaped. `overview --output DIR` writes the pages to `DIR`,
+  by default `overview/` in the data directory. With `allow_public: true` no private
+  repository is named, as in the report. The overview reads the history and scans the
+  account as the dashboard does, and works without either.
 - **The export** is Markdown in the order of V2. The products, the risks and the vocabulary
   are always there in full; the decisions, newest first with their text, fill what is
   left of `--max-chars` (12000 characters by default), each whole or left out, and the
@@ -518,14 +596,15 @@ The troubleshooting table in `CONTRIBUTING.md` is keyed on these messages.
 
 ### 7.12 The account scan (A1–A3)
 
-- **Who asks.** `report` and `dashboard` scan the account when `PORTFOLIO_ACCOUNT_TOKEN`
-  is set. No other command reads the variable, and without it both work as before (P8).
+- **Who asks.** `report`, `dashboard` and `overview` scan the account when
+  `PORTFOLIO_ACCOUNT_TOKEN` is set. No other command reads the variable, and without it all
+  three work as before (P8).
   The scan reads the account as it is when the command runs; `--today` moves only the
   window.
 - **The token** is a fine-grained personal access token of the owner, with access to all of
   the account's repositories and the read-only permission `Metadata`. It is kept as the
-  data repository's Actions secret `PORTFOLIO_ACCOUNT_TOKEN` and passed to the report and
-  dashboard jobs only (§3). It is never printed or logged. A classic token (`ghp_…`) is
+  data repository's Actions secret `PORTFOLIO_ACCOUNT_TOKEN` and passed to the report,
+  dashboard and overview jobs only (§3). It is never printed or logged. A classic token (`ghp_…`) is
   refused before it is sent anywhere: it cannot be read-only, and one that can read
   private repositories can write to all of them.
 - **The account's repositories.** The engine asks the GitHub REST API whom the token
@@ -539,10 +618,11 @@ The troubleshooting table in `CONTRIBUTING.md` is keyed on these messages.
   branch changes and merges. The candidate has the owner's activity on that entry's date
   when it falls within the window; a push by anyone else, Dependabot's for example, does
   not count. Where the activity list cannot be read, a push by anyone counts, and the
-  report and the dashboard say so and why.
+  report, the dashboard and the overview say so and why.
 - **Left out.** The data repository itself: `GITHUB_REPOSITORY` in GitHub Actions, the
   `origin` remote locally. With `allow_public: true`, private repositories are left out of
-  what the report and the dashboard name, because the report may then be public.
+  what the report, the dashboard and the overview name, because the report may then be
+  public.
   `account.ignore` leaves a repository out of A1 only; a repository that `repos` lists is
   in the portfolio whatever the patterns say.
 - **Names** are compared without regard to case, as GitHub compares them. A renamed
@@ -551,12 +631,12 @@ The troubleshooting table in `CONTRIBUTING.md` is keyed on these messages.
   created with access to public repositories only still answers, with the public ones:
   when the data repository belongs to the account but is not among the repositories the
   token lists, the token sees no private repository. The report then shows one item that
-  says so and how to fix it — repository access "All repositories" — and the dashboard a
-  note; what the token does see is still judged.
+  says so and how to fix it — repository access "All repositories" — and the dashboard and
+  the overview a note; what the token does see is still judged.
 - **Failures.** A rejected token (expired or revoked), a missing permission, a rate limit
   or a network failure stops the scan. The report then shows one item that names the
-  reason and the fix, the dashboard a note, and standard error a warning. The exit code
-  never changes.
+  reason and the fix, the dashboard and the overview a note, and standard error a warning.
+  The exit code never changes.
 
 ## 8. Design notes and rejected alternatives
 
@@ -624,6 +704,20 @@ own repository, so the poll needs a second token. It is optional, fine-grained a
 read-only; a classic token is refused because it cannot be read-only. The engine reads
 the repositories' metadata and activity lists, never their code. Only the owner's own
 activity counts, so Dependabot's pushes do not make a paused product look worked on.
+
+### 8.10 The overview lives in the repository
+
+The weekly issue lists only what needs attention, and the dashboard is a file to download.
+The owner asked for a complete picture to browse. GitHub renders Markdown and Mermaid in a
+private repository, on the web and in its mobile app, to exactly the people who can read
+the data. Rejected:
+- GitHub Pages: a Pages site of a private repository can be public (§8.8, V1).
+- The repository's wiki: it needs a paid plan for a private repository, and the workflow's
+  token cannot write to it, so it would take a second write token.
+- A hosted application: §2.
+
+The price is one job that can write to the repository; it runs no portfolio-ops code and
+commits only `overview/`.
 
 ## 9. Delivery phases and release policy
 
@@ -722,6 +816,12 @@ dashboard's repositories, and the action's `account-token` input.
 item under Account activity — every repository worked on belongs to an active product or
 a kernel, or is ignored.
 
+### 9.6 Phase 5 — v0.5.0
+
+**Scope:** V3, the overview, with its command, the action's `overview` command and
+output, and the overview and publish-overview jobs of the caller workflow.
+**Exit criterion:** the owner reads the overview instead of downloading the dashboard.
+
 ## 10. Measures and kill criterion
 
 - The Health section carries the measures that show whether the system works: focus
@@ -742,8 +842,9 @@ a kernel, or is ignored.
 | Visibility cannot be determined offline | A local run on a public repository only warns | CI fails closed, and a local run publishes nothing | the repository owner, by committing r1 |
 | Gates know only registered risks and claims | An unregistered problem passes a gate | Stated in §2 and §8.5; discovery is out of scope | the repository owner, by committing r1 |
 | Dates are evaluated in UTC | Day boundaries shift for owners far from UTC | Thresholds are measured in weeks | the repository owner, by committing r1 |
-| The account token reads the metadata of every repository of the account | A leaked token lists the names of private repositories and when they were pushed | The token is read-only and fine-grained, sees no code, expires, lives in an encrypted Actions secret passed to two jobs only, and is optional | the repository owner, by adopting r3 |
-| The activity list may be unreadable with the token's permissions | Pushes by others, such as Dependabot's, count as the owner's work | The report and the dashboard say so and name the reason; the owner can grant the permission GitHub names | the repository owner, by adopting r3 |
+| The account token reads the metadata of every repository of the account | A leaked token lists the names of private repositories and when they were pushed | The token is read-only and fine-grained, sees no code, expires, lives in an encrypted Actions secret passed to three jobs only, and is optional | the repository owner, by adopting r3 |
+| The publish-overview job can write to the data repository | A compromised step could change the data | The job runs no portfolio-ops code and no third-party action but `actions/checkout`, pinned by commit; it commits `overview/` only, and a workflow's token cannot change workflow files | the repository owner, by adopting r5 |
+| The activity list may be unreadable with the token's permissions | Pushes by others, such as Dependabot's, count as the owner's work | The report, the dashboard and the overview say so and name the reason; the owner can grant the permission GitHub names | the repository owner, by adopting r3 |
 <!-- RISKS:END -->
 
 ## 12. Revision log
@@ -754,3 +855,4 @@ a kernel, or is ignored.
 | r2 | 2026-09-23 | Folds in what phases 1–3 decided where r1 was silent, with no change of behaviour: the complete command-line interface and the action's output (§7.6), the report's ten sections (§7.4), change coverage (§7.9), the gates and lookup as commands (§7.10), the views (§7.11), the dashboard job of the caller workflow (§3), decision text (§4.6), and the rule texts of B1, B5, B6, K1, K2 and P2 |
 | r3 | 2026-09-24 | Adds phase 4, the account scan (§7.12, §8.9, §9.5), at the owner's request: `repos` on products and kernels (§4.5), `account.ignore` (§4.2), rules S8 and A1–A3 (§6), the report's Account activity section and Health line (§7.4), the dashboard's repositories (§7.11), the `account-token` input and `PORTFOLIO_ACCOUNT_TOKEN` (§3, §7.6), the account token in the anti-goals (§2), and two accepted risks (§11). The template repository exists (§3) |
 | r4 | 2026-09-24 | The account scan's coverage (§7.12): the report counts public and private repositories, and a token that sees no private repository is an item (§7.4); the dashboard marks private repositories (§7.11); the report's header links the workflow run (§7.4) |
+| r5 | 2026-09-24 | Adds phase 5, the overview (V3; §7.11, §8.10, §9.6): Markdown pages committed to `overview/` in the data repository by the caller workflow's overview and publish-overview jobs (§3), the `overview` command and the action's `overview` command and output (§7.6), which scans the account like `report` and `dashboard` (§7.12); the report's header links the overview (§7.4), and the last data commit leaves the overview aside; one accepted risk (§11) |

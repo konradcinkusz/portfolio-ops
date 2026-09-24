@@ -150,11 +150,11 @@ def test_the_standards_marketplace_is_declared() -> None:
 
 # ------------------------------------------------------------------ the specification (AC12)
 
-# SHA-256 of docs/business-rules.md, revision r4, as committed. The spec changes only by a
+# SHA-256 of docs/business-rules.md, revision r5, as committed. The spec changes only by a
 # new revision; implementation may change nothing but the Status and Entry point columns
 # of §6. A new revision updates these two constants in the same commit.
-SPEC_REVISION = "r4"
-SPEC_SHA256 = "a8e62ad94fab2bec07c89f253acf7bbcbb3cdd66dd2505101d6fd01588d8a0aa"
+SPEC_REVISION = "r5"
+SPEC_SHA256 = "9ceb01ec15e0bb0fc57c42f1364155b3ce2f960cf2c7a90e19b1aceee627c67c"
 CATALOGUE_ROW = re.compile(r"^\| [A-Z][0-9] \|")
 
 
@@ -197,7 +197,7 @@ def test_every_rule_of_every_phase_is_implemented_and_its_entry_point_exists() -
     structure = ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8"]
     phase_1 = ["L1", "L2", "N1", "N2", "N3", "N4", "P2", "R1", "R2", "R3"]
     phase_2 = ["B1", "B2", "B3", "B4", "B5", "B6", "K1", "K2", "P1", "P3"]
-    phase_3 = ["V1", "V2"]
+    phase_3 = ["V1", "V2", "V3"]
     phase_4 = ["A1", "A2", "A3"]
     assert [row[0][2:] for row in rows] == [*structure, *phase_1, *phase_2, *phase_3, *phase_4]
     for row in rows:

@@ -123,7 +123,7 @@ def read_account(
     left_out: str | None,
     hide_private: bool,
 ) -> Account:
-    """The account as the report and the dashboard show it: scanned when the token is set,
+    """The account as the report and the views show it: scanned when the token is set,
     or the reason it was not."""
     token = (env.get(ACCOUNT_TOKEN) or "").strip()
     if not token:

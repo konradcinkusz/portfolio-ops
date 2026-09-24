@@ -29,6 +29,7 @@ from portfolio_ops.errors import EnvironmentProblem
 from portfolio_ops.git import Git
 from portfolio_ops.loading import DataDir, product_values, risk_states
 from portfolio_ops.model import (
+    OVERVIEW_DIR,
     PRODUCTS_FILE,
     RISK_STATES,
     RISKS_FILE,
@@ -76,7 +77,7 @@ class History:
 
     next_action_since: Mapping[str, dt.date]  # every product in the working tree
     active_since: Mapping[str, dt.date]  # products whose status is active now
-    last_data_commit: dt.date | None  # the last commit touching the data directory
+    last_data_commit: dt.date | None  # the last commit touching the data, the overview aside
     changes: tuple[Change, ...] = ()  # every status and state change, oldest first
 
 
@@ -124,7 +125,8 @@ def read_history(git: Git, data: DataDir, today: dt.date, warn: Warn) -> History
     return History(
         next_action_since,
         active_since,
-        git.last_commit("."),
+        # The overview's pages are the workflow's commits, not the owner's (§7.4).
+        git.last_commit(".", f":(exclude){OVERVIEW_DIR}"),
         tuple(sorted(changes, key=lambda c: (c.date, c.kind, c.id))),
     )
 

@@ -1,7 +1,7 @@
 """The command line: ``validate`` and ``report`` (spec §7.6), the gates ``gate`` and
-``idea-gate`` (§6 B1–B6), ``lookup`` (P3), the views ``dashboard`` (V1) and ``export``
-(V2), and the exit codes of §7.7. ``report`` and ``dashboard`` also scan the account when
-``PORTFOLIO_ACCOUNT_TOKEN`` is set (§7.12).
+``idea-gate`` (§6 B1–B6), ``lookup`` (P3), the views ``dashboard`` (V1), ``export`` (V2)
+and ``overview`` (V3), and the exit codes of §7.7. ``report``, ``dashboard`` and
+``overview`` also scan the account when ``PORTFOLIO_ACCOUNT_TOKEN`` is set (§7.12).
 
 Every command runs in the order of §7.3: read config.yaml, check ``schema_version``
 (S6), run the visibility guard (S7), then everything else. Every command but
@@ -10,8 +10,9 @@ Every command runs in the order of §7.3: read config.yaml, check ``schema_versi
 Output: diagnostics — one line per finding, §7.8 — go to standard output for
 ``validate`` and ``gate``; Markdown for ``report``, ``idea-gate`` and ``export``; one
 line per recorded finding for ``lookup``; HTML for ``dashboard``, unless it writes a
-file. Warnings that are not the command's product, environment errors and summaries go
-to standard error, so the standard output of every command can be piped as it is.
+file; nothing for ``overview``, which writes its pages to a directory. Warnings that are
+not the command's product, environment errors and summaries go to standard error, so the
+standard output of every command can be piped as it is.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ import datetime as dt
 import os
 import posixpath
 import sys
+import urllib.parse
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -55,6 +57,7 @@ from portfolio_ops.model import (
     ALL,
     FILE_ORDER,
     FINDINGS_FILE,
+    OVERVIEW_DIR,
     PORTFOLIO,
     PRODUCTS_FILE,
     Account,
@@ -74,6 +77,13 @@ from portfolio_ops.rules.gates import gate, idea_gate, run_gate, run_idea_gate
 from portfolio_ops.rules.memory import lookup
 from portfolio_ops.views.dashboard import DashboardInput, render_dashboard
 from portfolio_ops.views.export import DEFAULT_MAX_CHARS, TooSmall, render_export
+from portfolio_ops.views.overview import (
+    DEFAULT_SERVER,
+    GENERATED_PREFIX,
+    OverviewInput,
+    page_files,
+    render_overview,
+)
 
 
 class _Parser(argparse.ArgumentParser):
@@ -123,7 +133,7 @@ def build_parser(out: IO[str], err: IO[str]) -> argparse.ArgumentParser:
     commands = parser.add_subparsers(
         dest="command",
         required=True,
-        metavar="{validate,report,gate,idea-gate,lookup,dashboard,export}",
+        metavar="{validate,report,gate,idea-gate,lookup,dashboard,export,overview}",
     )
     path_help = "the data directory (default: the root of the git repository, else '.')"
     check = commands.add_parser(
@@ -266,6 +276,29 @@ def build_parser(out: IO[str], err: IO[str]) -> argparse.ArgumentParser:
         default=DEFAULT_MAX_CHARS,
         help=f"the most characters the export may have (default: {DEFAULT_MAX_CHARS})",
     )
+    pages = commands.add_parser(
+        "overview",
+        help="write the whole portfolio as Markdown pages for the data repository",
+        description=(
+            "Write the whole portfolio as linked Markdown pages with Mermaid charts, which "
+            "GitHub renders in the private data repository. The pages are private: commit them "
+            "only to the data repository, and never publish them on GitHub Pages."
+        ),
+        out=out,
+        err=err,
+    )
+    pages.add_argument("--path", metavar="DIR", help=path_help)
+    pages.add_argument(
+        "--today",
+        metavar="YYYY-MM-DD",
+        type=_date,
+        help="the date to show the portfolio on (default: today, UTC)",
+    )
+    pages.add_argument(
+        "--output",
+        metavar="DIR",
+        help=f"write the pages to DIR (default: {OVERVIEW_DIR}/ in the data directory)",
+    )
     return parser
 
 
@@ -321,6 +354,7 @@ def main(
         "lookup": _lookup,
         "dashboard": _dashboard,
         "export": _export,
+        "overview": _overview,
     }
     try:
         return commands[args.command](args, context)
@@ -447,6 +481,7 @@ def _report(args: argparse.Namespace, context: _Context) -> int:
                 changes=history.changes,
                 account=_account(data, portfolio, today, context),
                 run=run,
+                overview=_overview_home(context.env, data),
             )
         )
     context.out.write(rendered.markdown)
@@ -466,23 +501,53 @@ def _report(args: argparse.Namespace, context: _Context) -> int:
     return EXIT_VIOLATIONS if errors else EXIT_OK
 
 
-def _workflow_run(env: Mapping[str, str]) -> WorkflowRun | None:
-    """The GitHub Actions run the report is rendered in, from the variables GitHub sets."""
+def _in_github_actions(env: Mapping[str, str]) -> str | None:
+    """In GitHub Actions, the address of the repository the workflow runs in, from the
+    variables GitHub sets; otherwise None."""
     server = env.get("GITHUB_SERVER_URL", "")
     repository = env.get("GITHUB_REPOSITORY", "")
-    run_id = env.get("GITHUB_RUN_ID", "")
     if env.get("GITHUB_ACTIONS") != "true" or not server.startswith("https://"):
         return None
-    if not is_repository(repository) or not run_id.isdigit():
+    return f"{server.rstrip('/')}/{repository}" if is_repository(repository) else None
+
+
+def _workflow_run(env: Mapping[str, str]) -> WorkflowRun | None:
+    """The GitHub Actions run the report is rendered in."""
+    repository = _in_github_actions(env)
+    run_id = env.get("GITHUB_RUN_ID", "")
+    if repository is None or not run_id.isdigit():
         return None
     number = env.get("GITHUB_RUN_NUMBER", "")
-    url = f"{server.rstrip('/')}/{repository}/actions/runs/{run_id}"
-    return WorkflowRun(url, number if number.isdigit() else run_id)
+    return WorkflowRun(
+        f"{repository}/actions/runs/{run_id}", number if number.isdigit() else run_id
+    )
+
+
+def _overview_home(env: Mapping[str, str], data: DataDir) -> str | None:
+    """The overview's home page on GitHub, for the report's header: in GitHub Actions, when
+    the data directory holds pages the overview wrote (§7.4). HEAD is the default branch,
+    where the workflow commits them."""
+    repository = _in_github_actions(env)
+    home = data.root / OVERVIEW_DIR / page_files()[0]
+    if repository is None or not _generated(home):
+        return None
+    inside = urllib.parse.quote(Git(data.root).prefix())  # the data directory, "" at the root
+    return f"{repository}/blob/HEAD/{inside}{OVERVIEW_DIR}/{page_files()[0]}"
+
+
+def _generated(path: Path) -> bool:
+    """Whether ``path`` is a page the overview wrote, which it may write again."""
+    try:
+        with path.open(encoding="utf-8", errors="replace") as page:
+            return page.read(len(GENERATED_PREFIX)) == GENERATED_PREFIX
+    except OSError:
+        return False
 
 
 def _account(data: DataDir, portfolio: Portfolio, today: dt.date, context: _Context) -> Account:
-    """The account scan of report and dashboard (§7.12): it leaves out the data repository,
-    and with allow_public it names no private repository. It never changes the exit code."""
+    """The account scan of report, dashboard and overview (§7.12): it leaves out the data
+    repository, and with allow_public it names no private repository. It never changes the
+    exit code."""
     left_out = context.env.get("GITHUB_REPOSITORY") or github_repository(
         Git(data.root).origin_url()
     )
@@ -700,7 +765,7 @@ def _dashboard(args: argparse.Namespace, context: _Context) -> int:
     if checked is None:
         return EXIT_VIOLATIONS
     data, portfolio = checked
-    history, missing = _history_if_any(data, today, context)
+    history, missing = _history_if_any(data, today, context, "dashboard")
     page = render_dashboard(
         DashboardInput(
             portfolio=portfolio,
@@ -721,7 +786,9 @@ def _dashboard(args: argparse.Namespace, context: _Context) -> int:
     return EXIT_OK
 
 
-def _history_if_any(data: DataDir, today: dt.date, context: _Context) -> tuple[History | None, str]:
+def _history_if_any(
+    data: DataDir, today: dt.date, context: _Context, view: str
+) -> tuple[History | None, str]:
     """The history, for a view that can do without it (P8), or why there is none."""
     git = Git(data.root)
     if not git.inside_work_tree():
@@ -733,7 +800,7 @@ def _history_if_any(data: DataDir, today: dt.date, context: _Context) -> tuple[H
         )
     else:
         return read_history(git, data, today, warn=_history_warning(context)), ""
-    context.err.write(f"note: the dashboard shows no clocks — {missing}\n")
+    context.err.write(f"note: the {view} shows no clocks — {missing}\n")
     return None, missing
 
 
@@ -754,6 +821,52 @@ def _export(args: argparse.Namespace, context: _Context) -> int:
     context.err.write(
         f"portfolio-ops export: {len(exported.markdown)} of at most {args.max_chars} "
         f"characters, with {exported.decisions} of {_count(exported.of, 'decision')}\n"
+    )
+    return EXIT_OK
+
+
+def _overview(args: argparse.Namespace, context: _Context) -> int:
+    today: dt.date = args.today or context.today()
+    checked = _validated(args, context, today, errors_to=context.err)
+    if checked is None:
+        return EXIT_VIOLATIONS
+    data, portfolio = checked
+    target = Path(args.output) if args.output else data.root / OVERVIEW_DIR
+    where = args.output if args.output else data.describe(OVERVIEW_DIR)
+    # Before the account is asked anything: never overwrite a file the overview did not
+    # write, such as the owner's README with --output pointing at the repository's root.
+    for name in page_files():
+        if (target / name).exists() and not _generated(target / name):
+            raise EnvironmentProblem(
+                f"{posixpath.join(where, name)} was not written by portfolio-ops, and the "
+                "overview would overwrite it — choose another directory with --output"
+            )
+    history, missing = _history_if_any(data, today, context, "overview")
+    env = context.env
+    server = env.get("GITHUB_SERVER_URL", "")
+    pages = render_overview(
+        OverviewInput(
+            portfolio=portfolio,
+            today=today,
+            clocks=clocks(portfolio, history, today) if history else None,
+            last_data_commit=history.last_data_commit if history else None,
+            no_clocks=missing,
+            account=_account(data, portfolio, today, context),
+            server=server if server.startswith("https://") else DEFAULT_SERVER,
+        )
+    )
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+        for name, text in pages.items():
+            (target / name).write_text(text, encoding="utf-8", newline="\n")
+    except OSError as exc:
+        raise EnvironmentProblem(f"cannot write the overview to {where}: {exc.strerror}") from exc
+    context.err.write(
+        f"portfolio-ops overview: wrote {_count(len(pages), 'page')} to {where} — "
+        f"{_count(len(portfolio.products), 'product')}, "
+        f"{_count(len(portfolio.kernels), 'kernel')}, {_count(len(portfolio.risks), 'risk')}, "
+        f"{_count(len(portfolio.findings), 'finding')} and "
+        f"{_count(len(portfolio.parsed_decisions()), 'decision')}\n"
     )
     return EXIT_OK
 

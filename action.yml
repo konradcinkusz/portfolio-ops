@@ -5,7 +5,7 @@
 # Every input reaches the shell through `env`, never through `${{ }}` inside a script, so
 # no input can inject shell code.
 name: portfolio-ops
-description: Validate a private portfolio data repository, keep one weekly-review issue current, render its dashboard and check the account's work against it.
+description: Validate a private portfolio data repository, keep one weekly-review issue current, render its dashboard and overview, and check the account's work against it.
 author: Konrad Cinkusz
 branding:
   icon: check-square
@@ -13,7 +13,7 @@ branding:
 
 inputs:
   command:
-    description: "validate, report or dashboard."
+    description: "validate, report, dashboard or overview."
     required: true
   path:
     description: The directory holding the data files, relative to the workspace.
@@ -33,8 +33,8 @@ inputs:
     default: ${{ github.token }}
   account-token:
     description: >-
-      Optional — with command: report or dashboard, scans the account (rules A1–A3). A
-      fine-grained, read-only token of the account's owner; pass the secret
+      Optional — with command: report, dashboard or overview, scans the account (rules
+      A1–A3). A fine-grained, read-only token of the account's owner; pass the secret
       PORTFOLIO_ACCOUNT_TOKEN. Empty: the account is not scanned.
     required: false
   python-version:
@@ -49,6 +49,12 @@ outputs:
       page lists the portfolio's weak spots: keep it a workflow artifact, never publish it
       on GitHub Pages.
     value: ${{ steps.run.outputs.dashboard }}
+  overview:
+    description: >-
+      With command: overview — the directory of the overview's Markdown pages, for
+      actions/upload-artifact and a job that commits them to the private data repository.
+      Never publish them on GitHub Pages.
+    value: ${{ steps.run.outputs.overview }}
 
 runs:
   using: composite
@@ -80,10 +86,10 @@ runs:
         DATA_PATH: ${{ inputs.path }}
       run: |
         # report reads the clock and the week's status changes from git history (rules N1
-        # and P1), the dashboard shows the clock, and validate compares with the previous
-        # commit (P1). On a shallow checkout report would stop with exit 2, the dashboard
-        # would show no clocks and validate would skip P1, so unshallow it here; if that
-        # fails, the engine's own message names fetch-depth: 0.
+        # and P1), the dashboard and the overview show the clock, and validate compares with
+        # the previous commit (P1). On a shallow checkout report would stop with exit 2, the
+        # dashboard and the overview would show no clocks and validate would skip P1, so
+        # unshallow it here; if that fails, the engine's own message names fetch-depth: 0.
         if [ "$(git -C "$DATA_PATH" rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
           git -C "$DATA_PATH" fetch --unshallow --quiet \
             || echo "::warning title=portfolio-ops::could not fetch the full history; set fetch-depth: 0 on actions/checkout"
@@ -99,20 +105,20 @@ runs:
         PUBLISH: ${{ inputs.publish }}
         DRY_RUN: ${{ inputs.dry-run }}
         GITHUB_TOKEN: ${{ inputs.github-token }}
-        # Only report and dashboard scan the account, so only they receive its token.
+        # Only report, dashboard and overview scan the account, so only they receive its token.
         PORTFOLIO_ACCOUNT_TOKEN: ${{ inputs.command != 'validate' && inputs.account-token || '' }}
         ACCOUNT_TOKEN_GIVEN: ${{ inputs.account-token != '' }}
       run: |
         set -euo pipefail
         args=("$COMMAND" --path "$DATA_PATH")
         case "$COMMAND" in
-          validate | dashboard) ;;
+          validate | dashboard | overview) ;;
           report)
             if [ "$PUBLISH" = "true" ]; then args+=(--publish); fi
             if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
             ;;
           *)
-            echo "::error title=portfolio-ops::the command input must be validate, report or dashboard"
+            echo "::error title=portfolio-ops::the command input must be validate, report, dashboard or overview"
             exit 2
             ;;
         esac
@@ -120,10 +126,15 @@ runs:
           echo "::warning title=portfolio-ops::publish and dry-run apply to the report command only"
         fi
         if [ "$COMMAND" = validate ] && [ "$ACCOUNT_TOKEN_GIVEN" = "true" ]; then
-          echo "::warning title=portfolio-ops::account-token applies to report and dashboard only; validate never scans the account"
+          echo "::warning title=portfolio-ops::account-token applies to report, dashboard and overview only; validate never scans the account"
         fi
-        # The page goes outside the workspace, so it can never be committed by accident.
+        # The dashboard and the overview go outside the workspace, so neither can be
+        # committed by accident: the overview reaches the repository only through the job
+        # that commits it.
         page="$RUNNER_TEMP/portfolio-dashboard.html"
+        pages="$RUNNER_TEMP/portfolio-overview"
         if [ "$COMMAND" = dashboard ]; then args+=(--output "$page"); fi
+        if [ "$COMMAND" = overview ]; then rm -rf "$pages"; args+=(--output "$pages"); fi
         "$ENGINE" -m portfolio_ops "${args[@]}"
         if [ "$COMMAND" = dashboard ]; then echo "dashboard=$page" >> "$GITHUB_OUTPUT"; fi
+        if [ "$COMMAND" = overview ]; then echo "overview=$pages" >> "$GITHUB_OUTPUT"; fi
