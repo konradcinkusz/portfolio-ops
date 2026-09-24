@@ -201,9 +201,6 @@ def test_every_rule_of_every_phase_is_implemented_and_its_entry_point_exists() -
     phase_4 = ["A1", "A2", "A3"]
     assert [row[0][2:] for row in rows] == [*structure, *phase_1, *phase_2, *phase_3, *phase_4]
     for row in rows:
-        if row[4] == "5":  # phase 5 is being implemented: r5 adds V3 as planned
-            assert row[5:] == ["planned", "— |"], row[0]
-            continue
         assert row[5] == _released_in(row), row[0]
         dotted = row[6].removesuffix(" |").strip("`")
         module, _, name = dotted.rpartition(".")

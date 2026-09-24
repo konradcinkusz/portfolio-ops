@@ -1,6 +1,6 @@
 # ADR 0009 — The overview: Markdown pages committed to the private repository
 
-- **Status:** proposed, 2026-09-24 — accepted when the owner merges phase 5
+- **Status:** accepted, 2026-09-24, with the merge of phase 5
 - **Decided by:** the owner, who found the weekly issue "at most a log" and asked for a
   complete summary to browse — a page or a wiki (business rules r5); the details are the
   engine's reading of §7.11, for the owner to confirm

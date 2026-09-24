@@ -46,7 +46,7 @@ Markdown. `dashboard` writes the whole portfolio as one page to open in a browse
 `overview` as linked Markdown pages with charts, for GitHub to render in your repository.
 
 To install a release without cloning:
-`pipx install git+https://github.com/konradcinkusz/portfolio-ops@v0.4.1`.
+`pipx install git+https://github.com/konradcinkusz/portfolio-ops@v0.5.0`.
 
 ## Using it for your own portfolio
 
@@ -301,7 +301,7 @@ The JSON Schemas let an editor check a file as you type. With the YAML extension
 VS Code, for example, put this on the first line of `products.yaml`:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/konradcinkusz/portfolio-ops/v0.4.1/src/portfolio_ops/schemas/products.schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/konradcinkusz/portfolio-ops/v0.5.0/src/portfolio_ops/schemas/products.schema.json
 ```
 
 ## Commands
