@@ -131,7 +131,7 @@ def test_the_changelog_has_an_entry_for_the_current_version() -> None:
 def test_secrets_env_example_documents_the_variables_a_user_sets() -> None:
     example = (ROOT / "secrets.env.example").read_text(encoding="utf-8")
 
-    for name in ("GITHUB_TOKEN", "GITHUB_REPOSITORY"):
+    for name in ("GITHUB_TOKEN", "GITHUB_REPOSITORY", "PORTFOLIO_ACCOUNT_TOKEN"):
         assert re.search(rf"^{name}=$", example, re.MULTILINE), name
 
 
@@ -150,11 +150,11 @@ def test_the_standards_marketplace_is_declared() -> None:
 
 # ------------------------------------------------------------------ the specification (AC12)
 
-# SHA-256 of docs/business-rules.md, revision r2, as committed. The spec changes only by a
+# SHA-256 of docs/business-rules.md, revision r3, as committed. The spec changes only by a
 # new revision; implementation may change nothing but the Status and Entry point columns
 # of §6. A new revision updates these two constants in the same commit.
-SPEC_REVISION = "r2"
-SPEC_SHA256 = "951bca85c8db2a3240b7c1acbd2ffc69fbad847848fcf1e4685e4a948916f93d"
+SPEC_REVISION = "r3"
+SPEC_SHA256 = "95305c3ac08c25879db3ff582d1b1c68a8e93f289519930ff7f1f5814bb23f68"
 CATALOGUE_ROW = re.compile(r"^\| [A-Z][0-9] \|")
 
 
@@ -194,10 +194,12 @@ def test_every_rule_of_every_phase_is_implemented_and_its_entry_point_exists() -
 
     rows = _catalogue_rows()
 
-    phase_1 = ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "L1", "L2", "N1", "N2", "N3", "N4", "P2"]
+    structure = ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8"]
+    phase_1 = ["L1", "L2", "N1", "N2", "N3", "N4", "P2", "R1", "R2", "R3"]
     phase_2 = ["B1", "B2", "B3", "B4", "B5", "B6", "K1", "K2", "P1", "P3"]
     phase_3 = ["V1", "V2"]
-    assert [row[0][2:] for row in rows] == [*phase_1, "R1", "R2", "R3", *phase_2, *phase_3]
+    phase_4 = ["A1", "A2", "A3"]
+    assert [row[0][2:] for row in rows] == [*structure, *phase_1, *phase_2, *phase_3, *phase_4]
     for row in rows:
         assert row[5] == _released_in(row), row[0]
         dotted = row[6].removesuffix(" |").strip("`")

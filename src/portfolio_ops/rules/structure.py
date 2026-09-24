@@ -1,4 +1,4 @@
-"""Structure rules S1–S5 and the memory rule P2 (spec §6).
+"""Structure rules S1–S5 and S8, and the memory rule P2 (spec §6).
 
 Each rule is a pure function of the typed model and today's date. A value that is
 present but has the wrong type was already reported by the shape check in loading.py,
@@ -27,7 +27,12 @@ from portfolio_ops.model import (
     SEVERITIES,
     STATUSES,
     Diagnostic,
+    Kernel,
     Portfolio,
+    Product,
+    Term,
+    is_repository,
+    is_repository_pattern,
 )
 from portfolio_ops.rules import rule
 
@@ -154,10 +159,11 @@ def check_vocabularies(portfolio: Portfolio, today: dt.date) -> Iterator[Diagnos
                     f"not {_one_of(FEED_MODES)} — use one of them",
                 )
     for kernel in portfolio.kernels:
-        label = f"kernel '{kernel.id}'" if kernel.id else f"the kernel on line {kernel.loc.line}"
         for term in kernel.capabilities:
             if term.value not in config.capabilities:
-                yield _unknown_term("capability", term.value, label, kernel.loc.file, term.line)
+                yield _unknown_term(
+                    "capability", term.value, kernel.label, kernel.loc.file, term.line
+                )
     yield from _risk_vocabularies(portfolio)
     yield from _finding_vocabularies(portfolio)
     yield from _decision_headings(portfolio, today)
@@ -379,6 +385,59 @@ def check_config_vocabularies(portfolio: Portfolio, today: dt.date) -> Iterator[
                     "built-in values, so remove it"
                 )
             yield _error("S5", CONFIG_FILE, term.line, message)
+
+
+@rule("S8", "repos name repositories, each listed once; account.ignore holds patterns")
+def check_repositories(portfolio: Portfolio, today: dt.date) -> Iterator[Diagnostic]:
+    """Every entry of ``repos`` is OWNER/NAME and belongs to one product or kernel; every
+    entry of ``account.ignore`` is OWNER/NAME with * and ? allowed. GitHub compares names
+    without regard to case, so S8 does too (§7.12)."""
+    first: dict[str, tuple[Product | Kernel, Term]] = {}
+    owners: tuple[Product | Kernel, ...] = (*portfolio.products, *portfolio.kernels)
+    for owner in owners:
+        file = owner.loc.file
+        for term in owner.repos:
+            if not is_repository(term.value):
+                yield _error(
+                    "S8",
+                    file,
+                    term.line,
+                    f"{owner.label} lists repository '{term.value}', which is not written "
+                    "OWNER/NAME — write the owner and the name as GitHub shows them",
+                )
+                continue
+            key = term.value.lower()
+            if key not in first:
+                first[key] = (owner, term)
+                continue
+            earlier, where = first[key]
+            if earlier is owner:
+                message = f"{owner.label} lists repository '{term.value}' twice — keep one"
+            else:
+                message = (
+                    f"repository '{term.value}' is already listed by {earlier.label} at "
+                    f"{earlier.loc.file}:{where.line} — a repository belongs to one product or "
+                    "kernel, so keep it in one list"
+                )
+            yield _error("S8", file, term.line, message)
+    seen: set[str] = set()
+    for term in portfolio.config.account_ignore:
+        if not is_repository_pattern(term.value):
+            yield _error(
+                "S8",
+                CONFIG_FILE,
+                term.line,
+                f"account.ignore lists '{term.value}', which is not a repository pattern — write "
+                "OWNER/NAME, where * and ? stand for any characters",
+            )
+        elif term.value.lower() in seen:
+            yield _error(
+                "S8",
+                CONFIG_FILE,
+                term.line,
+                f"account.ignore lists '{term.value}' twice — keep one",
+            )
+        seen.add(term.value.lower())
 
 
 @rule("P2", "findings carry checked_on and an expiry; claims say where they are used")

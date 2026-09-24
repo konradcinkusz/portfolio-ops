@@ -624,6 +624,9 @@ def build_config(doc: Document) -> Config:
         vocabulary_loc = Loc(doc.file, 1, _sub(doc, ("vocabularies",)))
         for name in raw_vocabularies:
             vocabularies[name] = _terms(raw_vocabularies, name, vocabulary_loc) or ()
+    raw_account = values.get("account")
+    account = raw_account if isinstance(raw_account, dict) else {}
+    account_loc = Loc(doc.file, 1, _sub(doc, ("account",)))
     raw_ttl = values.get("finding_ttl_days")
     ttl = {
         name: days
@@ -650,6 +653,7 @@ def build_config(doc: Document) -> Config:
         ),
         vocabularies=vocabularies,
         finding_ttl_days=ttl,
+        account_ignore=_terms(account, "ignore", account_loc) or (),
     )
 
 
@@ -675,6 +679,7 @@ def build_products(doc: Document | None) -> Iterator[Product]:
             ),
             status_reason=_text(entry, "status_reason"),
             review_by=_date(entry, "review_by"),
+            repos=_terms(entry, "repos", loc) or (),
             present=frozenset(entry),
         )
 
@@ -687,6 +692,7 @@ def build_kernels(doc: Document | None) -> Iterator[Kernel]:
             name=_text(entry, "name"),
             capabilities=_terms(entry, "capabilities", loc) or (),
             min_package_consumers=_whole(entry.get("min_package_consumers"), 2),
+            repos=_terms(entry, "repos", loc) or (),
         )
 
 

@@ -9,6 +9,7 @@ holds it rather than refusing it.
 from __future__ import annotations
 
 import datetime as dt
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Literal
@@ -33,6 +34,26 @@ VOCABULARY_PATTERN = r"[a-z0-9][a-z0-9_-]{0,62}"
 PORTFOLIO = "portfolio"
 ALL = "all"
 RESERVED_IDS = (PORTFOLIO, ALL)
+
+# A GitHub repository written OWNER/NAME (§4.5, S8): an owner of up to 39 letters, digits
+# and hyphens that starts with a letter or digit, and a name of letters, digits, '.', '_'
+# and '-' other than '.' and '..'. An account.ignore pattern (§4.2) may also use * and ?.
+REPOSITORY_PATTERN = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}"
+REPOSITORY_GLOB_PATTERN = r"[A-Za-z0-9*?](?:[A-Za-z0-9*?-]{0,38})/[A-Za-z0-9._*?-]{1,100}"
+_REPOSITORY = re.compile(REPOSITORY_PATTERN)
+_REPOSITORY_GLOB = re.compile(REPOSITORY_GLOB_PATTERN)
+
+
+def is_repository(text: str) -> bool:
+    """Whether ``text`` names a repository: OWNER/NAME, the name not '.' or '..'."""
+    return bool(_REPOSITORY.fullmatch(text)) and text.split("/", 1)[1].strip(".") != ""
+
+
+def is_repository_pattern(text: str) -> bool:
+    """Whether ``text`` is an account.ignore pattern: OWNER/NAME where * and ? may stand
+    for any characters."""
+    return bool(_REPOSITORY_GLOB.fullmatch(text)) and text.split("/", 1)[1].strip(".") != ""
+
 
 # §4.3 — fixed by the engine; config.yaml cannot change them (S5).
 STATUSES = ("idea", "active", "paused", "dormant", "archived")
@@ -117,6 +138,7 @@ class Product:
     feeds_from: tuple[FeedsFrom, ...] = ()
     status_reason: str | None = None
     review_by: dt.date | None = None
+    repos: tuple[Term, ...] = ()  # the GitHub repositories of the product (§4.5)
     present: frozenset[str] = frozenset()
 
     @property
@@ -131,6 +153,11 @@ class Kernel:
     name: str | None
     capabilities: tuple[Term, ...] = ()
     min_package_consumers: int = 2
+    repos: tuple[Term, ...] = ()  # the GitHub repositories of the kernel (§4.5)
+
+    @property
+    def label(self) -> str:
+        return f"kernel '{self.id}'" if self.id else f"the kernel on line {self.loc.line}"
 
 
 @dataclass(frozen=True)
@@ -217,6 +244,60 @@ class Change:
 
 
 @dataclass(frozen=True)
+class AccountRepository:
+    """One repository of the owner's GitHub account, as the account scan saw it (§7.12).
+
+    ``activity`` says whether the owner's own activity was read: ``unchecked`` for a
+    repository that is not a candidate (not pushed in the window, archived, or a fork that
+    ``repos`` does not list), ``read`` with ``owner_active_on`` the date of the owner's
+    latest activity (None if there is none), and ``unreadable`` where the activity list
+    could not be read — there a push by anyone counts.
+    """
+
+    name: str  # OWNER/NAME, as GitHub spells it
+    private: bool
+    fork: bool
+    archived: bool
+    pushed_on: dt.date | None  # the latest push by anyone, as a UTC date
+    activity: Literal["unchecked", "read", "unreadable"] = "unchecked"
+    owner_active_on: dt.date | None = None
+
+
+@dataclass(frozen=True)
+class AccountScan:
+    """The account's repositories, and the window the owner's activity is judged in."""
+
+    login: str
+    since: dt.date  # the window's first day
+    until: dt.date  # today
+    repositories: tuple[AccountRepository, ...]
+    left_out: str | None = None  # the data repository, which the scan leaves out
+    hide_private: bool = False  # allow_public: private repositories are not named
+    unreadable: str = ""  # why activity lists could not be read, when some could not
+
+
+@dataclass(frozen=True)
+class Account:
+    """What the report and the dashboard know about the account: a scan, or why there is
+    none. ``failed`` means a token was set and the scan still did not happen — a report
+    item; without a token the account is simply not scanned (P8)."""
+
+    scan: AccountScan | None = None
+    problem: str = ""
+    failed: bool = False
+
+
+# The environment variable that holds the account token (§7.12), and the account without it.
+ACCOUNT_TOKEN = "PORTFOLIO_ACCOUNT_TOKEN"  # noqa: S105 — the variable's name, not a token
+NOT_SCANNED = Account(
+    problem=(
+        f"{ACCOUNT_TOKEN} is not set — the scan is optional; the portfolio-ops README says "
+        "how to set it up"
+    )
+)
+
+
+@dataclass(frozen=True)
 class Thresholds:
     stale_days: int = 30
     actions_per_week: float = 1
@@ -240,6 +321,7 @@ class Config:
     # Every key under ``vocabularies`` as written, including ones S5 rejects.
     vocabularies: Mapping[str, tuple[Term, ...]] = field(default_factory=dict)
     finding_ttl_days: Mapping[str, int] = field(default_factory=dict)
+    account_ignore: tuple[Term, ...] = ()  # account.ignore: repository patterns (§4.2)
 
     def declared(self, vocabulary: str) -> tuple[str, ...]:
         return tuple(term.value for term in self.vocabularies.get(vocabulary, ()))

@@ -26,3 +26,9 @@ vocabularies:
 finding_ttl_days:
   name_check: 180
   metric: 30
+
+# The account scan (rules A1–A3) runs when PORTFOLIO_ACCOUNT_TOKEN is set. It leaves out
+# the repositories listed here: ones that are not projects. * and ? stand for any
+# characters; write a pattern rather than a person's name.
+account:
+  ignore: [example-owner/dotfiles, "example-owner/*-notes"]

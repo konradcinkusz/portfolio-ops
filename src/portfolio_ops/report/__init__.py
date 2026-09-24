@@ -2,8 +2,8 @@
 
 A section is a function from the report's input to a titled block of Markdown, and it is
 registered under its position — the same registry pattern as the rules (P10). R2 fixes
-the order; phase 2 added its four sections by registering more functions, not by editing
-the renderer.
+the order; phase 2 added its four sections, and phase 4 the account's, by registering more
+functions, not by editing the renderer.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from portfolio_ops.history import Clock
-from portfolio_ops.model import Change, Portfolio
+from portfolio_ops.model import NOT_SCANNED, Account, Change, Portfolio
 
 
 @dataclass(frozen=True)
@@ -24,6 +24,7 @@ class ReportInput:
     next_action_since: Mapping[str, dt.date]  # every product
     last_data_commit: dt.date | None
     changes: tuple[Change, ...] = ()  # P1: every status and state change in history
+    account: Account = NOT_SCANNED  # A1–A3: the account scan, or why there is none
 
 
 @dataclass(frozen=True)

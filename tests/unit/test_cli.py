@@ -45,6 +45,7 @@ def test_the_starter_example_validates_without_errors(tmp_path: Path) -> None:
         ("S3", "products.yaml", 14),
         ("S4", "products.yaml", 3),
         ("S5", "config.yaml", 13),
+        ("S8", "products.yaml", 17),
         ("P2", "findings.yaml", 3),
         ("L1", "products.yaml", 25),
     ],
@@ -199,6 +200,7 @@ def test_report_with_a_fixed_date_is_deterministic(data_repo: GitRepo) -> None:
         "Expired claims",
         "Copy-paste debt",
         "Changes without a decision",
+        "Account activity",
         "Focus",
         "Health",
     ]

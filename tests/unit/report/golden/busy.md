@@ -60,6 +60,10 @@ warning P1 products.yaml:13: product 'beta' changed status from active to paused
 
 A decision records a change when it names the id and carries the change's date; a decision may be dated in the past.
 
+## Account activity
+
+The account was not scanned: PORTFOLIO_ACCOUNT_TOKEN is not set — the scan is optional; the portfolio-ops README says how to set it up.
+
 ## Focus
 
 - **No focus recorded this week.** Record one in decisions.md as `## 2026-09-22 · <product> · focus`.
@@ -72,4 +76,5 @@ A decision records a change when it names the id and carries the change's date; 
 - Stale products: 1
 - Focus completion: 0 of the last 1 evaluated focus decisions done
 - Kernels: 0 done, 1 extracted, 0 planned
+- Account: not scanned
 - Last commit touching the data: 2026-09-20

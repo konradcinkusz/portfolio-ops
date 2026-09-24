@@ -525,6 +525,116 @@ def test_s5_the_configured_types_extend_the_built_in_ones(tmp_path: Path) -> Non
     assert check(tmp_path, {"decisions.md": decisions}) == []
 
 
+# ------------------------------------------------------------------ S8
+
+KERNELS = "kernels:\n  - id: core\n    name: Core\n    capabilities: [sync]\n"
+
+
+def with_repos(product_repos: str, kernel_repos: str = "") -> dict[str, str]:
+    """The valid fixture, with ``repos`` on alpha (line 10) and on the kernel (line 5)."""
+    products = VALID_PRODUCTS.replace(
+        "        mode: package\n", f"        mode: package\n    repos: {product_repos}\n", 1
+    )
+    kernels = KERNELS + (f"    repos: {kernel_repos}\n" if kernel_repos else "")
+    return {"products.yaml": products, "kernels.yaml": kernels}
+
+
+def test_s8_repositories_and_ignore_patterns_that_follow_the_rules_pass(tmp_path: Path) -> None:
+    files = with_repos(
+        "[example-owner/alpha, example-owner/alpha-web, example-owner/.github]",
+        "[Example-Owner/core_lib]",
+    )
+    files["config.yaml"] = CONFIG + (
+        "account:\n  ignore: [example-owner/dotfiles, 'example-owner/*-notes', '*/sandbox?']\n"
+    )
+
+    assert check(tmp_path, files) == []
+
+
+@pytest.mark.parametrize(
+    "bad",
+    ["alpha", "example-owner/", "/alpha", "example_owner/alpha", "example-owner/..", "a/b/c"],
+)
+def test_s8_a_repository_is_written_owner_slash_name(tmp_path: Path, bad: str) -> None:
+    lines = check(tmp_path, with_repos(f"['{bad}']"))
+
+    assert lines == [
+        (
+            f"error S8 products.yaml:10: product 'alpha' lists repository '{bad}', which is not "
+            "written OWNER/NAME — write the owner and the name as GitHub shows them"
+        )
+    ]
+
+
+def test_s8_a_product_lists_a_repository_once_whatever_its_case(tmp_path: Path) -> None:
+    lines = check(tmp_path, with_repos("[example-owner/alpha, Example-Owner/ALPHA]"))
+
+    assert lines == [
+        (
+            "error S8 products.yaml:10: product 'alpha' lists repository 'Example-Owner/ALPHA' "
+            "twice — keep one"
+        )
+    ]
+
+
+def test_s8_a_repository_belongs_to_one_product_or_kernel(tmp_path: Path) -> None:
+    lines = check(tmp_path, with_repos("[example-owner/core]", "[Example-Owner/Core]"))
+
+    assert lines == [
+        (
+            "error S8 kernels.yaml:5: repository 'Example-Owner/Core' is already listed by "
+            "product 'alpha' at products.yaml:10 — a repository belongs to one product or "
+            "kernel, so keep it in one list"
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ("ignore", "message"),
+    [
+        (
+            "[dotfiles]",
+            (
+                "account.ignore lists 'dotfiles', which is not a repository pattern — write "
+                "OWNER/NAME, where * and ? stand for any characters"
+            ),
+        ),
+        (
+            "['example-owner/[ab]*']",
+            (
+                "account.ignore lists 'example-owner/[ab]*', which is not a repository pattern "
+                "— write OWNER/NAME, where * and ? stand for any characters"
+            ),
+        ),
+        (
+            "[example-owner/notes, Example-Owner/Notes]",
+            "account.ignore lists 'Example-Owner/Notes' twice — keep one",
+        ),
+    ],
+)
+def test_s8_account_ignore_holds_repository_patterns(
+    tmp_path: Path, ignore: str, message: str
+) -> None:
+    lines = check(tmp_path, {"config.yaml": CONFIG + f"account:\n  ignore: {ignore}\n"})
+
+    assert lines == [f"error S8 config.yaml:20: {message}"]
+
+
+def test_s8_leaves_a_list_of_the_wrong_shape_to_the_schema(tmp_path: Path) -> None:
+    root = copy_fixture("valid", tmp_path / "data")
+    write_files(root, with_repos("example-owner/alpha"))
+    data = DataDir(root)
+    loaded = load_portfolio(data, read_config(data))
+
+    assert [p.render() for p in loaded.problems] == [
+        (
+            "error schema products.yaml:10: repos of product 'alpha' must be a list, not text "
+            "— correct it"
+        )
+    ]
+    assert validate(loaded.portfolio, TODAY) == []
+
+
 # ------------------------------------------------------------------ P2
 
 

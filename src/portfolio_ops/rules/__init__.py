@@ -18,8 +18,9 @@ Check = Callable[[Portfolio, dt.date], Iterable[Diagnostic]]
 
 # The order of the catalogue in spec §6, which is also the order rules run in.
 CATALOGUE = (
-    *("S1", "S2", "S3", "S4", "S5", "S6", "S7", "L1", "L2", "N1", "N2", "N3", "N4", "P2"),
-    *("R1", "R2", "R3", "B1", "B2", "B3", "B4", "B5", "B6", "K1", "K2", "P1", "P3"),
+    *("S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "L1", "L2", "N1", "N2", "N3", "N4"),
+    *("P2", "R1", "R2", "R3", "B1", "B2", "B3", "B4", "B5", "B6", "K1", "K2", "P1", "P3"),
+    *("A1", "A2", "A3"),
 )
 
 

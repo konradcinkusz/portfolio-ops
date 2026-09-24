@@ -1,8 +1,8 @@
 """The report sections of spec §7.4: Stale (N2), Escalations (N3), Overdue reviews (N4),
 the four that R2 adds in phase 2 — Expired acceptances (B3), Expired claims (P2),
-Copy-paste debt (K2) and Changes without a decision (P1) — then Focus (R3) and Health.
-Section 1, Validation errors, is rendered by render.py because it replaces the others
-rather than preceding them.
+Copy-paste debt (K2) and Changes without a decision (P1) — then Account activity (A1–A3,
+phase 4), Focus (R3) and Health. Section 1, Validation errors, is rendered by render.py
+because it replaces the others rather than preceding them.
 """
 
 from __future__ import annotations
@@ -12,8 +12,15 @@ import re
 import statistics
 from collections.abc import Iterator
 
-from portfolio_ops.model import PORTFOLIO, Decision, Portfolio, Product
+from portfolio_ops.model import PORTFOLIO, AccountScan, Decision, Portfolio, Product
 from portfolio_ops.report import ReportInput, Section, section
+from portfolio_ops.rules.account import (
+    inactive_work,
+    outside_portfolio,
+    shown,
+    unknown_repositories,
+    worked_on,
+)
 from portfolio_ops.rules.changes import check_changes
 from portfolio_ops.rules.kernels import copies, kernel_state
 
@@ -255,6 +262,108 @@ def changes_without_decision(data: ReportInput) -> Section:
     return Section("Changes without a decision", tuple(lines), True)
 
 
+@section(9)
+def account_activity(data: ReportInput) -> Section:
+    """A1–A3: the account's repositories against the portfolio (§7.12)."""
+    title = "Account activity"
+    account = data.account
+    scan = account.scan
+    if scan is None:
+        if account.failed:
+            return Section(title, (f"- **The account was not scanned.** {account.problem}.",), True)
+        return Section(title, (f"The account was not scanned: {account.problem}.",), False)
+    portfolio = data.portfolio
+    outside = outside_portfolio(portfolio, scan)
+    inactive = inactive_work(portfolio, scan)
+    unknown = unknown_repositories(portfolio, scan)
+    visible = shown(scan)
+    active_in = sum(1 for repository in visible if worked_on(repository, scan) is not None)
+    lines = [
+        (
+            f"{_count(len(visible), 'repository')} of {scan.login} scanned; your activity "
+            f"since {scan.since} is in {active_in} of them."
+        )
+    ]
+    if outside:
+        lines += [
+            "",
+            "Repositories worked on outside the portfolio (A1):",
+            "",
+            "| Repository | Last worked on |",
+            "|---|---|",
+            *(f"| `{w.repository.name}` | {w.on} |" for w in outside),
+            "",
+            (
+                "Add each to the repos of its product or kernel, registering a new product as "
+                "an idea, or add it to account.ignore in config.yaml."
+            ),
+        ]
+    if inactive:
+        lines += [
+            "",
+            "Products that are not active, but were worked on (A2):",
+            "",
+            "| Product | Status | Repository | Last worked on |",
+            "|---|---|---|---|",
+            *(
+                f"| {product_label(w.product, w.product.id or '')} | {w.product.status} | "
+                f"`{w.repository.name}` | {w.on} |"
+                for w in inactive
+            ),
+            "",
+            (
+                "Make each product active within wip_limit, with its decision, or stop working "
+                "on it."
+            ),
+        ]
+    if unknown:
+        lines += [
+            "",
+            "Listed repositories the account does not have (A3):",
+            "",
+            "| Listed by | Repository |",
+            "|---|---|",
+            *(
+                f"| {entity_label(u.owner.name, u.owner.id or '')} | `{u.term.value}` |"
+                for u in unknown
+            ),
+            "",
+            (
+                "Correct each name — a renamed repository goes by its new name — or remove it "
+                "from repos."
+            ),
+        ]
+    if not (outside or inactive or unknown):
+        lines += [
+            "",
+            (
+                f"Nothing outside the plan: every repository you worked on since {scan.since} "
+                "belongs to an active product or a kernel, or is ignored."
+            ),
+        ]
+    lines += _scan_notes(scan)
+    return Section(title, tuple(lines), bool(outside or inactive or unknown))
+
+
+def _scan_notes(scan: AccountScan) -> list[str]:
+    notes = []
+    unreadable = sum(1 for r in shown(scan) if r.activity == "unreadable")
+    if unreadable:
+        notes.append(
+            f"Your activity could not be told apart from other pushes in "
+            f"{_count(unreadable, 'repository')}: {scan.unreadable}. There, a push by anyone "
+            "counts."
+        )
+    if scan.hide_private:
+        notes.append("allow_public is set, so private repositories are left out.")
+    return [line for note in notes for line in ("", note)]
+
+
+def _count(number: int, noun: str) -> str:
+    plural = f"{noun[:-1]}ies" if noun.endswith("y") else f"{noun}s"
+    return f"{number} {noun}" if number == 1 else f"{number} {plural}"
+
+
 def _focus_decisions(portfolio: Portfolio) -> list[Decision]:
     """Parsed focus decisions, latest first; the later heading wins on the same day."""
     focus = [d for d in portfolio.parsed_decisions() if d.type == "focus" and d.date is not None]
@@ -293,7 +402,7 @@ def _evaluated(data: ReportInput) -> Iterator[tuple[Decision, str]]:
             yield decision, evaluate_focus(data, decision)
 
 
-@section(9)
+@section(10)
 def focus(data: ReportInput) -> Section:
     """R3: this week's focus, and last week's evaluated."""
     this_week = this_weeks_focus(data.portfolio, data.today)
@@ -318,7 +427,7 @@ def focus(data: ReportInput) -> Section:
     return Section("Focus", tuple(lines), this_week is None)
 
 
-@section(10)
+@section(11)
 def health(data: ReportInput) -> Section:
     """The measures of spec §10. Not items: they never make the report 'have items'."""
     thresholds = data.portfolio.config.thresholds
@@ -345,6 +454,20 @@ def health(data: ReportInput) -> Section:
         f"- Stale products: {stale_count}",
         f"- Focus completion: {completion}",
         f"- Kernels: {kernels}",
+        f"- Account: {_account_health(data)}",
         f"- Last commit touching the data: {last_commit}",
     )
     return Section("Health", lines, False)
+
+
+def _account_health(data: ReportInput) -> str:
+    """The repositories worked on in the window, and how many are outside the portfolio."""
+    scan = data.account.scan
+    if scan is None:
+        return "not scanned"
+    worked = sum(1 for repository in shown(scan) if worked_on(repository, scan) is not None)
+    outside = len(outside_portfolio(data.portfolio, scan))
+    return (
+        f"{_count(worked, 'repository')} worked on since {scan.since}, {outside} of them "
+        "outside the portfolio"
+    )

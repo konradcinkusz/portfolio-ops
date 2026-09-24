@@ -13,11 +13,57 @@ links point at the commits they describe.
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-09-24
+
+Phase 4 of the [business rules](docs/business-rules.md) (§9.5), and their revision r3: the
+account scan. The data format is unchanged — `schema_version` stays 1, and every new field
+is optional.
+
+### Added
+
+- **The account scan** (§7.12, [ADR 0008](docs/adr/0008-account-scan.md)). With
+  `PORTFOLIO_ACCOUNT_TOKEN` set, `report` and `dashboard` ask GitHub which repositories the
+  owner's account has, and which of them the owner worked on since the same weekday last
+  week. The token is a fine-grained, read-only token. The owner's own activity counts,
+  not Dependabot's. Without the token nothing changes.
+- The report's section 9, **Account activity**:
+  - A1: repositories worked on outside the portfolio
+  - A2: products that are not active, but were worked on
+  - A3: listed repositories the account does not have
+
+  Health counts the repositories worked on and how many are outside the portfolio. Focus
+  and Health are now sections 10 and 11.
+- The dashboard's **Repositories** panel, an "Outside the plan" tile, and a Last push
+  column for the active, paused and dormant products.
+- `repos` on products and kernels, and `account.ignore` in `config.yaml`, checked offline
+  by the new rule **S8**.
+- The action's `account-token` input. It is passed to `report` and `dashboard` only, and
+  `validate` warns if it is given one.
+- The README's "Scanning the account", with the token's setup, and troubleshooting rows
+  for every new message.
+
 ### Changed
 
+- A failed scan never changes the exit code:
+  - A classic token (`ghp_…`) is refused before anything is sent.
+  - A rejected token is one report item that says how to fix it.
+  - An activity list GitHub will not show falls back to the push date, and the report says
+    so.
 - The README sends a new data repository to
   [portfolio-ops-template](https://github.com/konradcinkusz/portfolio-ops-template), which
   now exists, instead of a hand-made copy of `examples/starter`.
+- ADR 0007 is accepted, with the merge of phase 3. ADR 0001 is amended for the second
+  secret, and ADR 0002 names the template repository.
+- The fictional starter example lists its repositories and an ignore pattern.
+
+### Upgrading a data repository
+
+Dependabot bumps the pinned SHA; add the account token by hand:
+
+1. Create the token and the secret as the README's "Scanning the account" says.
+2. Add `account-token: ${{ secrets.PORTFOLIO_ACCOUNT_TOKEN }}` under `with:` in the report
+   and dashboard jobs of `.github/workflows/portfolio.yml`.
+3. Add `repos` to your products and kernels.
 
 ## [0.3.0] — 2026-09-23
 
@@ -121,7 +167,8 @@ Phase 1 of the [business rules](docs/business-rules.md), revision r1 (§9.1).
   dependency audit, secret scan, action self-test), CodeQL, a tag-driven release workflow,
   Dependabot, templates and ADRs 0001–0004.
 
-[Unreleased]: https://github.com/konradcinkusz/portfolio-ops/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/konradcinkusz/portfolio-ops/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/konradcinkusz/portfolio-ops/releases/tag/v0.4.0
 [0.3.0]: https://github.com/konradcinkusz/portfolio-ops/releases/tag/v0.3.0
 [0.2.0]: https://github.com/konradcinkusz/portfolio-ops/tree/7c55fb2
 [0.1.0]: https://github.com/konradcinkusz/portfolio-ops/tree/c8bd6e4

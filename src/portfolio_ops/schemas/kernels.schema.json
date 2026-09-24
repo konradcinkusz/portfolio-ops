@@ -67,6 +67,25 @@
           ],
           "minimum": 1,
           "default": 2
+        },
+        "repos": {
+          "description": "The GitHub repositories where the work on this kernel happens, written OWNER/NAME. Each repository belongs to one product or kernel (rule S8); the account scan reads them (rules A1–A3).",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "allOf": [
+            {
+              "x-rule": "S8",
+              "uniqueItems": true,
+              "items": {
+                "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}$"
+              }
+            }
+          ]
         }
       }
     }

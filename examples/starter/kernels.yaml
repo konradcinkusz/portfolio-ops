@@ -6,6 +6,7 @@ kernels:
     name: Sync Core
     capabilities: [offline-sync]
     min_package_consumers: 2
+    repos: [example-owner/sync-core]
 
   - id: map-tiles
     name: Map Tiles
