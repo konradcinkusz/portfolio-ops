@@ -63,7 +63,7 @@ from portfolio_ops.model import (
     Product,
     is_repository,
 )
-from portfolio_ops.report import ReportInput
+from portfolio_ops.report import ReportInput, WorkflowRun
 from portfolio_ops.report.overlap import render_idea_gate
 from portfolio_ops.report.publish import publish
 from portfolio_ops.report.render import render, render_invalid
@@ -431,8 +431,9 @@ def _report(args: argparse.Namespace, context: _Context) -> int:
     errors = [d for d in diagnostics if d.severity == "error"]
     for warning in (d for d in diagnostics if d.severity == "warning"):
         context.warn(warning)
+    run = _workflow_run(context.env)
     if errors:
-        rendered = render_invalid(errors, data.display, today)
+        rendered = render_invalid(errors, data.display, today, run)
     else:
         history = read_history(Git(data.root), data, today, warn=_history_warning(context))
         portfolio = loaded.portfolio
@@ -445,6 +446,7 @@ def _report(args: argparse.Namespace, context: _Context) -> int:
                 last_data_commit=history.last_data_commit,
                 changes=history.changes,
                 account=_account(data, portfolio, today, context),
+                run=run,
             )
         )
     context.out.write(rendered.markdown)
@@ -462,6 +464,20 @@ def _report(args: argparse.Namespace, context: _Context) -> int:
         except GitHubError as exc:
             raise EnvironmentProblem(f"publishing to {repository} failed: {exc}") from exc
     return EXIT_VIOLATIONS if errors else EXIT_OK
+
+
+def _workflow_run(env: Mapping[str, str]) -> WorkflowRun | None:
+    """The GitHub Actions run the report is rendered in, from the variables GitHub sets."""
+    server = env.get("GITHUB_SERVER_URL", "")
+    repository = env.get("GITHUB_REPOSITORY", "")
+    run_id = env.get("GITHUB_RUN_ID", "")
+    if env.get("GITHUB_ACTIONS") != "true" or not server.startswith("https://"):
+        return None
+    if not is_repository(repository) or not run_id.isdigit():
+        return None
+    number = env.get("GITHUB_RUN_NUMBER", "")
+    url = f"{server.rstrip('/')}/{repository}/actions/runs/{run_id}"
+    return WorkflowRun(url, number if number.isdigit() else run_id)
 
 
 def _account(data: DataDir, portfolio: Portfolio, today: dt.date, context: _Context) -> Account:

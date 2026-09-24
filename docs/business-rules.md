@@ -1,6 +1,6 @@
 # portfolio-ops — business rules
 
-> **Status:** specification, revision **r3**, 2026-09-24.
+> **Status:** specification, revision **r4**, 2026-09-24.
 > The source of truth for the engine's behaviour. Master prompts in `docs/delivery/` are
 > generated from this document. When code, a prompt and this document disagree, this
 > document wins and the disagreement is a finding. During implementation only the
@@ -355,7 +355,9 @@ value of `--today`. Git commit times are the committer timestamps, converted to 
 
 ### 7.4 The report (R2, R3)
 
-The report is Markdown on standard output, with these sections in this order:
+The report is Markdown on standard output. Its header names the date, and in GitHub Actions
+it links the workflow run, whose artifacts hold the dashboard (§3). Its sections come in
+this order:
 
 1. **Validation errors** — only when validation fails. The other sections are then left out
    with a one-line note, and the command exits 1.
@@ -373,9 +375,10 @@ The report is Markdown on standard output, with these sections in this order:
    have (§7.9).
 9. **Account activity** — A1, A2 and A3, from the account scan (§7.12): the repositories
    worked on outside the portfolio, those of products that are not `active`, and the
-   listed ones the account does not have. Without `PORTFOLIO_ACCOUNT_TOKEN` the section
-   says the account was not scanned, and that is not an item; a scan that was asked for
-   and failed is one item, naming the reason and the fix.
+   listed ones the account does not have, after how many public and private repositories
+   the scan read. Without `PORTFOLIO_ACCOUNT_TOKEN` the section says the account was not
+   scanned, and that is not an item; a scan that was asked for and failed is one item,
+   naming the reason and the fix, and so is a token that sees no private repository.
 10. **Focus** — this week's focus: the latest `focus` decision dated within the seven days
     ending today, or the item "No focus recorded this week". Last week's focus: the latest
     `focus` decision dated before that window, evaluated as `done` (the product's
@@ -494,10 +497,11 @@ The troubleshooting table in `CONTRIBUTING.md` is keyed on these messages.
   those that count as open first; the findings, the soonest to expire first; which
   products and kernels share each capability; the ten latest decisions with their text;
   and the account's repositories (§7.12) — forks and archived ones only when `repos` lists
-  them — each with the product or kernel that lists it, the latest push first. When the
-  account was scanned, the products panels show the latest push of each product's
-  repositories and the summary counts the repositories worked on outside the plan (A1,
-  A2); otherwise the repositories panel says why the account was not scanned.
+  them — each with the product or kernel that lists it and whether it is private, the
+  latest push first. When the account was scanned, the products panels show the latest
+  push of each product's repositories and the summary counts the repositories worked on
+  outside the plan (A1, A2); otherwise the repositories panel says why the account was
+  not scanned.
 - It goes to standard output, or to `--output FILE`. Without git history — outside a
   repository, or on a shallow clone — it leaves out the clocks and says why. In the
   composite action it is written outside the workspace, and the output `dashboard` holds
@@ -543,6 +547,12 @@ The troubleshooting table in `CONTRIBUTING.md` is keyed on these messages.
   in the portfolio whatever the patterns say.
 - **Names** are compared without regard to case, as GitHub compares them. A renamed
   repository is listed under its new name, so A3 reports the old one.
+- **Coverage.** The scan counts the public and the private repositories it read. A token
+  created with access to public repositories only still answers, with the public ones:
+  when the data repository belongs to the account but is not among the repositories the
+  token lists, the token sees no private repository. The report then shows one item that
+  says so and how to fix it — repository access "All repositories" — and the dashboard a
+  note; what the token does see is still judged.
 - **Failures.** A rejected token (expired or revoked), a missing permission, a rate limit
   or a network failure stops the scan. The report then shows one item that names the
   reason and the fix, the dashboard a note, and standard error a warning. The exit code
@@ -743,3 +753,4 @@ a kernel, or is ignored.
 | r1 | 2026-09-22 | Initial specification |
 | r2 | 2026-09-23 | Folds in what phases 1–3 decided where r1 was silent, with no change of behaviour: the complete command-line interface and the action's output (§7.6), the report's ten sections (§7.4), change coverage (§7.9), the gates and lookup as commands (§7.10), the views (§7.11), the dashboard job of the caller workflow (§3), decision text (§4.6), and the rule texts of B1, B5, B6, K1, K2 and P2 |
 | r3 | 2026-09-24 | Adds phase 4, the account scan (§7.12, §8.9, §9.5), at the owner's request: `repos` on products and kernels (§4.5), `account.ignore` (§4.2), rules S8 and A1–A3 (§6), the report's Account activity section and Health line (§7.4), the dashboard's repositories (§7.11), the `account-token` input and `PORTFOLIO_ACCOUNT_TOKEN` (§3, §7.6), the account token in the anti-goals (§2), and two accepted risks (§11). The template repository exists (§3) |
+| r4 | 2026-09-24 | The account scan's coverage (§7.12): the report counts public and private repositories, and a token that sees no private repository is an item (§7.4); the dashboard marks private repositories (§7.11); the report's header links the workflow run (§7.4) |

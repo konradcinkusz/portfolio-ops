@@ -17,6 +17,14 @@ from portfolio_ops.model import NOT_SCANNED, Account, Change, Portfolio
 
 
 @dataclass(frozen=True)
+class WorkflowRun:
+    """The GitHub Actions run that renders the report; its artifacts hold the dashboard."""
+
+    url: str
+    number: str
+
+
+@dataclass(frozen=True)
 class ReportInput:
     portfolio: Portfolio
     today: dt.date
@@ -25,6 +33,7 @@ class ReportInput:
     last_data_commit: dt.date | None
     changes: tuple[Change, ...] = ()  # P1: every status and state change in history
     account: Account = NOT_SCANNED  # A1–A3: the account scan, or why there is none
+    run: WorkflowRun | None = None  # in GitHub Actions: the run, linked from the header
 
 
 @dataclass(frozen=True)
@@ -68,6 +77,7 @@ __all__ = [
     "ReportInput",
     "Section",
     "SectionFunction",
+    "WorkflowRun",
     "section",
     "sections",
     "title",

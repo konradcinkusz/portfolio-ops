@@ -1,6 +1,6 @@
 # ADR 0008 — The account scan: a scheduled poll with a read-only, fine-grained token
 
-- **Status:** proposed, 2026-09-24 — accepted when the owner merges phase 4
+- **Status:** accepted, 2026-09-24, with the merge of phase 4
 - **Decided by:** the owner, who asked for portfolio-ops to watch the whole GitHub account
   (business rules r3); the details are the engine's reading of §7.12, for the owner to
   confirm
@@ -87,6 +87,14 @@ a dead network stops the whole scan instead.
 **S8 checks offline.** `repos` entries must be written `OWNER/NAME` and belong to one
 product or kernel. `account.ignore` entries are `OWNER/NAME` patterns in which `*` and `?`
 stand for any characters. `validate` never touches the network for the account.
+
+**Coverage (r4).** A fine-grained token's repository access is "Public repositories" unless
+its owner chooses otherwise, and such a token answers without complaint: it lists the
+public repositories and nothing else. The first real scan read exactly the account's public
+repositories that way. So the scan counts public and private repositories, and checks the
+one private repository it knows exists: the data repository. When that repository belongs
+to the account but is not listed, the token sees no private repository, and the report
+says so as an item, with the fix. A count alone would not have been noticed.
 
 **Left out.**
 

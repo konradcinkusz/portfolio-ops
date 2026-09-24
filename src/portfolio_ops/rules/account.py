@@ -91,6 +91,23 @@ def shown(scan: AccountScan) -> tuple[AccountRepository, ...]:
     return tuple(r for r in scan.repositories if not (scan.hide_private and r.private))
 
 
+def visibility(scan: AccountScan) -> tuple[int, int]:
+    """How many of the repositories the report may name are public, and how many private."""
+    private = sum(1 for repository in shown(scan) if repository.private)
+    return len(shown(scan)) - private, private
+
+
+def blind_spot(scan: AccountScan) -> str | None:
+    """Why the scan holds no private repository, when the token sees none (§7.12)."""
+    if scan.sees_private:
+        return None
+    return (
+        f"the token does not list this private repository, {scan.left_out}, so every private "
+        "repository of the account is missing from the scan — on GitHub, edit the token and "
+        'set its repository access to "All repositories"'
+    )
+
+
 def _newest_first(work: Work | InactiveWork) -> tuple[int, str]:
     return -work.on.toordinal(), work.repository.name.lower()
 

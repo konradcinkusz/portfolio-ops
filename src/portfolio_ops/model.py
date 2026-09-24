@@ -274,6 +274,9 @@ class AccountScan:
     left_out: str | None = None  # the data repository, which the scan leaves out
     hide_private: bool = False  # allow_public: private repositories are not named
     unreadable: str = ""  # why activity lists could not be read, when some could not
+    # False when the token does not list the account's private data repository: it was
+    # given access to public repositories only, so no private repository is here (§7.12).
+    sees_private: bool = True
 
 
 @dataclass(frozen=True)

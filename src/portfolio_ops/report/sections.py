@@ -15,10 +15,12 @@ from collections.abc import Iterator
 from portfolio_ops.model import PORTFOLIO, AccountScan, Decision, Portfolio, Product
 from portfolio_ops.report import ReportInput, Section, section
 from portfolio_ops.rules.account import (
+    blind_spot,
     inactive_work,
     outside_portfolio,
     shown,
     unknown_repositories,
+    visibility,
     worked_on,
 )
 from portfolio_ops.rules.changes import check_changes
@@ -278,12 +280,14 @@ def account_activity(data: ReportInput) -> Section:
     unknown = unknown_repositories(portfolio, scan)
     visible = shown(scan)
     active_in = sum(1 for repository in visible if worked_on(repository, scan) is not None)
-    lines = [
-        (
-            f"{_count(len(visible), 'repository')} of {scan.login} scanned; your activity "
-            f"since {scan.since} is in {active_in} of them."
-        )
-    ]
+    public, private = visibility(scan)
+    split = "" if scan.hide_private else f" ({public} public, {private} private)"
+    blind = blind_spot(scan)
+    lines = [f"- **The token sees only public repositories:** {blind}.", ""] if blind else []
+    lines.append(
+        f"{_count(len(visible), 'repository')}{split} of {scan.login} scanned; your activity "
+        f"since {scan.since} is in {active_in} of them."
+    )
     if outside:
         lines += [
             "",
@@ -342,7 +346,7 @@ def account_activity(data: ReportInput) -> Section:
             ),
         ]
     lines += _scan_notes(scan)
-    return Section(title, tuple(lines), bool(outside or inactive or unknown))
+    return Section(title, tuple(lines), bool(outside or inactive or unknown or blind))
 
 
 def _scan_notes(scan: AccountScan) -> list[str]:
@@ -467,7 +471,8 @@ def _account_health(data: ReportInput) -> str:
         return "not scanned"
     worked = sum(1 for repository in shown(scan) if worked_on(repository, scan) is not None)
     outside = len(outside_portfolio(data.portfolio, scan))
+    only = "" if scan.sees_private else " (public repositories only)"
     return (
         f"{_count(worked, 'repository')} worked on since {scan.since}, {outside} of them "
-        "outside the portfolio"
+        f"outside the portfolio{only}"
     )
