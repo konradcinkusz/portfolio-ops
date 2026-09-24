@@ -32,7 +32,7 @@ Every status and state change since 2026-09-15 has its decision.
 
 ## Account activity
 
-7 repositories of example-owner scanned; your activity since 2026-09-15 is in 6 of them.
+7 repositories (0 public, 7 private) of example-owner scanned; your activity since 2026-09-15 is in 6 of them.
 
 Repositories worked on outside the portfolio (A1):
 

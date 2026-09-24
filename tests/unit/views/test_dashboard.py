@@ -339,8 +339,8 @@ def test_work_outside_the_plan_stands_out(view: BuildView) -> None:
     for marker in (
         '<div class="tile attention"><dt>Outside the plan</dt><dd class="value">3</dd>',
         (
-            '<code>example-owner/side-quest</code></td><td>— <span class="badge attention">'
-            "outside</span>"
+            '<code>example-owner/side-quest</code> <span class="badge">private</span></td><td>— '
+            '<span class="badge attention">outside</span>'
         ),
         '<span class="badge attention">not active</span>',
         '<span class="badge attention">worked on</span>',
@@ -348,7 +348,10 @@ def test_work_outside_the_plan_stands_out(view: BuildView) -> None:
             '<span class="badge attention">not found</span> Listed in repos, but not in the '
             "account: <code>example-owner/gamma-renamed</code> (Gamma <code>gamma</code>)."
         ),
-        '<code>example-owner/dotfiles</code></td><td><span class="badge">ignored</span>',
+        (
+            '<code>example-owner/dotfiles</code> <span class="badge">private</span></td><td>'
+            '<span class="badge">ignored</span>'
+        ),
         '<span class="sub">a push by anyone</span>',
     ):
         assert marker in page, marker
@@ -385,3 +388,20 @@ def test_with_allow_public_no_private_repository_is_named(view: BuildView) -> No
 
     assert "side-quest" not in page
     assert "allow_public is set, so private repositories are left out." in page
+
+
+def test_a_token_that_sees_only_public_repositories_stands_out(view: BuildView) -> None:
+    scan = (
+        replace(SCANNED.scan, sees_private=False, left_out="example-owner/data")
+        if SCANNED.scan
+        else None
+    )
+    page = render_dashboard(replace(view(WITH_REPOS), account=Account(scan=scan)))
+
+    assert (
+        '<p class="note"><span class="badge attention">public only</span> The token sees only '
+        "public repositories: the token does not list this private repository, "
+        "example-owner/data, so every private repository"
+    ) in page
+    assert '<div class="tile attention"><dt>Outside the plan</dt>' in page
+    assert "public repositories only</dd>" in page

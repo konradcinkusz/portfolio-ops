@@ -324,3 +324,39 @@ def test_an_activity_entry_without_a_timestamp_is_no_activity() -> None:
     assert account.scan is not None
     assert account.scan.repositories[0].activity == "read"
     assert account.scan.repositories[0].owner_active_on is None
+
+
+# ------------------------------------------------------------------ coverage (§7.12, r4)
+
+
+def test_a_token_that_does_not_list_the_private_data_repository_sees_no_private_one() -> None:
+    fake = github(repo("public-tool", "2026-01-01T00:00:00Z", private=False))
+
+    account = scan(fake, left_out=f"{LOGIN}/portfolio-data")
+
+    assert account.scan is not None
+    assert not account.scan.sees_private
+
+
+@pytest.mark.parametrize(
+    ("repositories", "left_out", "hide_private"),
+    [
+        # the data repository is listed: the token sees private repositories
+        ([repo("portfolio-data", "2026-01-01T00:00:00Z")], f"{LOGIN}/portfolio-data", False),
+        # another private repository is listed: the token was given some of them
+        ([repo("secret", "2026-01-01T00:00:00Z")], f"{LOGIN}/portfolio-data", False),
+        # the data repository belongs to another owner: nothing to tell
+        ([repo("public-tool", "2026-01-01T00:00:00Z", private=False)], "an-org/data", False),
+        # no data repository is known: nothing to tell
+        ([repo("public-tool", "2026-01-01T00:00:00Z", private=False)], None, False),
+        # allow_public: the data repository may be public, so its absence tells nothing
+        ([repo("public-tool", "2026-01-01T00:00:00Z", private=False)], f"{LOGIN}/data", True),
+    ],
+)
+def test_without_that_proof_the_token_is_taken_to_see_private_repositories(
+    repositories: list[dict[str, Any]], left_out: str | None, hide_private: bool
+) -> None:
+    account = scan(github(*repositories), left_out=left_out, hide_private=hide_private)
+
+    assert account.scan is not None
+    assert account.scan.sees_private

@@ -57,9 +57,11 @@ def scan_account(
     since = window_start(today)
     repositories = []
     unreadable = ""
+    data_listed = False
     for owned in client.owned_repositories():
         key = owned.name.lower()
         if left_out is not None and key == left_out.lower():
+            data_listed = True
             continue
         pushed_on = utc_date(owned.pushed_at)
         repository = AccountRepository(
@@ -85,6 +87,9 @@ def scan_account(
             else:
                 repository = replace(repository, activity="read", owner_active_on=utc_date(latest))
         repositories.append(repository)
+    # The data repository is the one repository of the account known to exist; a private
+    # one that the token does not list means the token sees no private repository at all.
+    data_owner = left_out.split("/", 1)[0].lower() if left_out else None
     return AccountScan(
         login=login,
         since=since,
@@ -93,6 +98,12 @@ def scan_account(
         left_out=left_out,
         hide_private=hide_private,
         unreadable=unreadable,
+        sees_private=(
+            data_listed
+            or data_owner != login.lower()
+            or hide_private
+            or any(repository.private for repository in repositories)
+        ),
     )
 
 

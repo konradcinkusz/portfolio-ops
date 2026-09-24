@@ -40,12 +40,14 @@ from portfolio_ops.model import (
 )
 from portfolio_ops.report.sections import this_weeks_focus
 from portfolio_ops.rules.account import (
+    blind_spot,
     ignored,
     inactive_work,
     listing,
     outside_portfolio,
     shown,
     unknown_repositories,
+    visibility,
     worked_on,
 )
 from portfolio_ops.rules.kernels import consumers, copies, kernel_state
@@ -344,7 +346,10 @@ def _outside_the_plan(view: DashboardInput) -> str:
         return _tile("Outside the plan", "—", note, attention=failed)
     count = len(outside_portfolio(view.portfolio, scan)) + len(inactive_work(view.portfolio, scan))
     note = f"repositories worked on since {_date(scan.since)}"
-    return _tile("Outside the plan", str(count), note, attention=count > 0)
+    if not scan.sees_private:
+        note += " · public repositories only"
+    attention = count > 0 or not scan.sees_private
+    return _tile("Outside the plan", str(count), note, attention=attention)
 
 
 @panel(2)
@@ -650,11 +655,14 @@ def repositories(view: DashboardInput) -> Panel:
     every = [r for r in shown(scan) if r.name.lower() in listed or not (r.fork or r.archived)]
     every.sort(key=lambda r: (r.pushed_on is None, -_ordinal(r.pushed_on), r.name.lower()))
     worked = sum(1 for r in every if worked_on(r, scan) is not None)
+    public, private = visibility(scan)
+    split = "" if scan.hide_private else f" ({public} public, {private} private)"
     notes = [
         (
-            f"{_counted_repositories(len(every))} of {scan.login}, the latest push first; your "
-            f"activity since {scan.since} is in {worked} of them. Forks and archived "
-            "repositories appear when repos lists them."
+            f"{_counted_repositories(len(shown(scan)))}{split} of {scan.login}; "
+            f"{_counted_repositories(len(every))} shown, the latest push first — forks and "
+            "archived repositories appear when repos lists them. Your activity since "
+            f"{scan.since} is in {worked} of them."
         )
     ]
     unreadable = sum(1 for r in every if r.activity == "unreadable")
@@ -667,6 +675,13 @@ def repositories(view: DashboardInput) -> Panel:
     if scan.hide_private:
         notes.append("allow_public is set, so private repositories are left out.")
     parts = [f'<p class="note">{_e(note)}</p>' for note in notes]
+    blind = blind_spot(scan)
+    if blind:
+        parts.insert(
+            0,
+            f'<p class="note">{_badge("public only", "attention")} The token sees only public '
+            f"repositories: {_e(blind)}.</p>",
+        )
     unknown = unknown_repositories(portfolio, scan)
     if unknown:
         names = ", ".join(
@@ -699,11 +714,12 @@ def _counted_repositories(count: int) -> str:
 
 
 def _repository_name(repository: AccountRepository) -> str:
-    badges = [
-        _badge(kind)
-        for kind, flag in (("fork", repository.fork), ("archived", repository.archived))
-        if flag
-    ]
+    flags = (
+        ("private", repository.private),
+        ("fork", repository.fork),
+        ("archived", repository.archived),
+    )
+    badges = [_badge(kind) for kind, flag in flags if flag]
     return " ".join([_code(repository.name), *badges])
 
 
