@@ -121,6 +121,53 @@ jobs:
           name: portfolio-dashboard
           path: ${{ steps.portfolio.outputs.dashboard }}
           retention-days: 7
+
+  overview:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@<full-commit-sha>   # vX.Y.Z
+        with:
+          fetch-depth: 0
+      - id: portfolio
+        uses: konradcinkusz/portfolio-ops@<full-commit-sha>   # vX.Y.Z
+        with:
+          command: overview
+          account-token: ${{ secrets.PORTFOLIO_ACCOUNT_TOKEN }}
+      - uses: actions/upload-artifact@<full-commit-sha>   # vX.Y.Z
+        with:
+          name: portfolio-overview
+          path: ${{ steps.portfolio.outputs.overview }}
+          retention-days: 1
+
+  publish-overview:
+    needs: overview
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    concurrency:
+      group: publish-overview
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@<full-commit-sha>   # vX.Y.Z
+      - name: Commit the overview when it changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          pages="$RUNNER_TEMP/portfolio-overview"
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name portfolio-overview --dir "$pages"
+          rm -rf overview && mkdir overview && cp "$pages"/*.md overview/
+          git add --all overview
+          if git diff --cached --quiet; then echo "The overview is current."; exit 0; fi
+          git -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --quiet -m "Update the portfolio overview"
+          git push --quiet || { git pull --rebase --quiet && git push --quiet; }
 ```
 
 Pin the action to a release's full commit SHA, with its tag in a comment, or at least to
