@@ -3,6 +3,8 @@
 - **Status:** accepted, 2026-09-22
 - **Decided by:** the repository owner, with decisions D1, D4 and D5 of the phase-1 prompt
 - **Governs:** the whole repository
+- **Amended by:** [ADR 0008](0008-account-scan.md) — P5: a second secret, the optional
+  `PORTFOLIO_ACCOUNT_TOKEN`, read the same way
 
 ## Context
 
@@ -38,7 +40,7 @@ database, no container, no Fly.io app, no `Program.cs` and no runtime telemetry 
 | §2 secret hygiene | gitleaks in pre-commit and CI; `secrets.env.example` documents every variable with its tier; `.env` is gitignored. |
 | §3 one-command onboarding | `python scripts/setup.py` (D4). There is no mandatory secret to generate; `GITHUB_TOKEN` is the one optional setting and the script says what it enables. |
 | §4 operational scripts | None exist: there is nothing to build, push, deploy or destroy. |
-| §4a the product's users | Their onboarding is the template repository, planned before phase 2 and out of scope here. |
+| §4a the product's users | Their onboarding is the template repository, [`konradcinkusz/portfolio-ops-template`](https://github.com/konradcinkusz/portfolio-ops-template), created after phase 3. |
 | §4b dependency budget | Two runtime dependencies (D1), published with the installed count in the README. A third needs an ADR. |
 | §4c research artifacts | The arithmetic behind the thresholds is written down in business rules §8.1 and pinned by tests; the rule catalogue carries status and entry point for each rule (§6). No notebook: there is no statistical model to trace. |
 | §5 workflow lifecycle | Nothing retired yet; a retired workflow will move to `.github/workflows-archive/`. |

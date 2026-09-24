@@ -99,6 +99,7 @@ jobs:
         with:
           command: report
           publish: "true"
+          account-token: ${{ secrets.PORTFOLIO_ACCOUNT_TOKEN }}
 
   dashboard:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -113,6 +114,7 @@ jobs:
         uses: konradcinkusz/portfolio-ops@<full-commit-sha>   # vX.Y.Z
         with:
           command: dashboard
+          account-token: ${{ secrets.PORTFOLIO_ACCOUNT_TOKEN }}
       - uses: actions/upload-artifact@<full-commit-sha>   # vX.Y.Z
         with:
           name: portfolio-dashboard

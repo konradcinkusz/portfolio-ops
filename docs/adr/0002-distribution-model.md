@@ -19,7 +19,7 @@ Three layers (business rules §3):
 | Layer | Repository | Visibility | Holds | Updated by |
 |---|---|---|---|---|
 | Engine | `konradcinkusz/portfolio-ops` | public | CLI, composite action, JSON Schemas, documentation, fictional examples | semver tags |
-| Template | `portfolio-ops-template` (planned) | public, a template | a data skeleton and a caller workflow pinned to an engine version | nothing: it holds no logic |
+| Template | `konradcinkusz/portfolio-ops-template` | public, a template | a data skeleton and a caller workflow pinned to an engine version | nothing: it holds no logic |
 | Data | created with "Use this template" | private | the owner's real data | bumping the pinned engine version |
 
 - **D3 — the CI surface is a composite action at the repository root.** It installs the

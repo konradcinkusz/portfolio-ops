@@ -1,6 +1,6 @@
 # ADR 0007 — The views: a self-contained dashboard and a size-bounded export
 
-- **Status:** proposed, 2026-09-23 — accepted when the owner merges phase 3
+- **Status:** accepted, 2026-09-23, with the merge of phase 3
 - **Decided by:** the engine's reading of business rules §1 and §6 V1–V2, for the owner to
   confirm
 - **Governs:** `src/portfolio_ops/views/`, the `dashboard` and `export` commands, the

@@ -1,6 +1,6 @@
 # portfolio-ops — business rules
 
-> **Status:** specification, revision **r2**, 2026-09-23.
+> **Status:** specification, revision **r3**, 2026-09-24.
 > The source of truth for the engine's behaviour. Master prompts in `docs/delivery/` are
 > generated from this document. When code, a prompt and this document disagree, this
 > document wins and the disagreement is a finding. During implementation only the
@@ -20,6 +20,10 @@ constraint is the owner's attention. It has four functions:
 
 Dashboards and exports are views: they show state and contain no rules.
 
+The account scan (§7.12) checks the limit against where the work actually goes: it reports
+the repositories of the owner's GitHub account that were worked on outside the active
+products.
+
 ## 2. Scope and anti-goals
 
 portfolio-ops is a single-owner tool that runs in the owner's own repository. It is not:
@@ -27,8 +31,11 @@ portfolio-ops is a single-owner tool that runs in the owner's own repository. It
 - a team project-management system or an issue tracker;
 - a hosted service;
 - a place for credentials, tokens or personal data about other people — record "the
-  investor declined", not the person's name;
-- a discovery tool — gates know only what has been registered (§8.5);
+  investor declined", not the person's name. The data files hold no token: the account
+  token (§7.12) lives in the data repository's encrypted Actions secrets and reaches the
+  engine through the environment;
+- a discovery tool — gates know only what has been registered (§8.5), and the account
+  scan (§7.12) reports repositories for the owner to register, but registers nothing;
 - meant for public data repositories — it refuses them unless the owner opts in (S7, §8.8).
 
 ## 3. Distribution model
@@ -36,7 +43,7 @@ portfolio-ops is a single-owner tool that runs in the owner's own repository. It
 | Layer | Repository | Visibility | Contents | Updated by |
 |---|---|---|---|---|
 | Engine | `konradcinkusz/portfolio-ops` (this repository) | public | CLI, composite action, JSON Schemas, documentation, fictional examples | semver tags |
-| Template | `portfolio-ops-template` (planned) | public, marked as a template | data skeleton with fictional examples, `config.yaml` with defaults, a caller workflow pinned to an engine version | nothing to update: it holds no logic |
+| Template | `konradcinkusz/portfolio-ops-template` | public, marked as a template | data skeleton with fictional examples, `config.yaml` with defaults, a caller workflow pinned to an engine version | nothing to update: it holds no logic |
 | Data | created with "Use this template" | private | the owner's real data files | bumping the pinned engine version |
 
 - The engine is referenced by version, never copied. A repository created from a template
@@ -51,6 +58,9 @@ portfolio-ops is a single-owner tool that runs in the owner's own repository. It
 - The template's copy of the caller workflow skips every job in the template repository
   itself: the template is public and holds only examples, and S7 would refuse it. In a
   repository created from the template that condition always holds.
+- The report and dashboard jobs pass the account token (§7.12) from the secret
+  `PORTFOLIO_ACCOUNT_TOKEN`. Without that secret the input is empty and the account is
+  not scanned; the validate job never receives it.
 
 The caller workflow a data repository carries (the template ships this shape):
 
@@ -92,6 +102,7 @@ jobs:
         with:
           command: report
           publish: "true"
+          account-token: ${{ secrets.PORTFOLIO_ACCOUNT_TOKEN }}
 
   dashboard:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
@@ -106,6 +117,7 @@ jobs:
         uses: konradcinkusz/portfolio-ops@<full-commit-sha>   # vX.Y.Z
         with:
           command: dashboard
+          account-token: ${{ secrets.PORTFOLIO_ACCOUNT_TOKEN }}
       - uses: actions/upload-artifact@<full-commit-sha>   # vX.Y.Z
         with:
           name: portfolio-dashboard
@@ -145,6 +157,7 @@ All data files live in one directory — `--path`, by default the repository roo
 | `vocabularies.finding_types` | list of slugs | empty | added to the built-in `claim` |
 | `vocabularies.decision_types` | list of slugs | empty | added to the built-in decision types |
 | `finding_ttl_days` | map from finding type to days | empty | P2 |
+| `account.ignore` | list of repository patterns `OWNER/NAME`, where `*` and `?` stand for any characters | empty | S8, A1 |
 
 The engine has no built-in TTLs: a finding with neither `expires_on` nor a configured TTL
 for its type is invalid.
@@ -188,6 +201,7 @@ Configured in `config.yaml`: contexts, capabilities, further finding types (for 
 | `feeds_from` | list of `{kernel: <kernel id>, mode: <mode>}` | no |
 | `status_reason` | string | when `paused` or `dormant` |
 | `review_by` | date | when `paused` or `dormant` |
+| `repos` | list of GitHub repositories written `OWNER/NAME` | no |
 
 **Kernel** — `kernels.yaml`
 
@@ -197,6 +211,7 @@ Configured in `config.yaml`: contexts, capabilities, further finding types (for 
 | `name` | string | always |
 | `capabilities` | list of configured capabilities | no |
 | `min_package_consumers` | integer | no — default 2 |
+| `repos` | list of GitHub repositories written `OWNER/NAME` | no |
 
 **Risk** — `risks.yaml`
 
@@ -222,6 +237,10 @@ Configured in `config.yaml`: contexts, capabilities, further finding types (for 
 | `checked_on` | date | always |
 | `expires_on` | date | unless a TTL is configured for the type |
 | `used_in` | list of configured contexts — where a claim is used externally | non-empty for `claim`; optional otherwise |
+
+`repos` names the GitHub repositories where the work on a product or a kernel happens.
+Each repository belongs to one product or kernel (S8), and only the account scan (§7.12)
+reads the list.
 
 ### 4.6 Decisions — `decisions.md`
 
@@ -256,7 +275,8 @@ come from `thresholds.review_horizon_days`.
 
 ## 6. Rule catalogue
 
-Prefixes: S structure, L limit, N pressure, P memory, R report, B gates, K kernels, V views.
+Prefixes: S structure, L limit, N pressure, P memory, R report, B gates, K kernels, V views,
+A account.
 
 | ID | Rule | Enforced by | Effect | Phase | Status | Entry point |
 |---|---|---|---|---|---|---|
@@ -267,6 +287,7 @@ Prefixes: S structure, L limit, N pressure, P memory, R report, B gates, K kerne
 | S5 | `config.yaml` may extend the configured vocabularies only: it cannot redefine an engine-fixed vocabulary, and it cannot declare `all` as a context | `validate` | error | 1 | implemented (v0.1.0) | `portfolio_ops.rules.structure.check_config_vocabularies` |
 | S6 | `schema_version` is present and supported by this engine version | every command | exit 2, pointing to `docs/migrations/` | 1 | implemented (v0.1.0) | `portfolio_ops.loading.check_schema_version` |
 | S7 | A public data repository without `allow_public: true` is refused before any data file other than `config.yaml` is read (§7.3) | every command | exit 3 | 1 | implemented (v0.1.0) | `portfolio_ops.guard.check_visibility` |
+| S8 | Every entry of `repos` is a repository written `OWNER/NAME` and is listed by one product or kernel only, compared without regard to case; every entry of `account.ignore` is `OWNER/NAME` in which `*` and `?` may stand for any characters | `validate` | error | 4 | planned | — |
 | L1 | The number of `active` products is at most `wip_limit`. The message lists the active products and asks to keep at most `wip_limit` of them, moving the rest to `paused` or `dormant` with a `review_by` | `validate` | error | 1 | implemented (v0.1.0) | `portfolio_ops.rules.limits.check_wip_limit` |
 | L2 | `wip_limit` ≤ `stale_days` / 7 × `actions_per_week` (§8.1) | `validate` | warning | 1 | implemented (v0.1.0) | `portfolio_ops.rules.limits.check_pressure_arithmetic` |
 | N1 | The clock of an `active` product is today minus the latest of: `next_action` changing to its current value, the product last becoming `active`, its latest `defer` decision (§7.2) | `report` | — | 1 | implemented (v0.1.0) | `portfolio_ops.history.clocks` |
@@ -289,6 +310,9 @@ Prefixes: S structure, L limit, N pressure, P memory, R report, B gates, K kerne
 | P3 | Before a new check, look up (`subject`, `type`): reuse a valid finding; re-check and update an expired one (§7.10) | `lookup`, procedure | — | 2 | implemented (v0.2.0) | `portfolio_ops.rules.memory.lookup` |
 | V1 | Dashboard: static HTML generated from the data; for a private data repository never published to GitHub Pages — a workflow artifact or a local file (§7.11) | `dashboard` | — | 3 | implemented (v0.3.0) | `portfolio_ops.views.dashboard.render_dashboard` |
 | V2 | Context export: size-bounded Markdown for LLM sessions — active and paused products with their next actions, open risks of severity `medium` or higher, the latest decisions, the capability vocabulary (§7.11) | `export` | — | 3 | implemented (v0.3.0) | `portfolio_ops.views.export.render_export` |
+| A1 | A repository of the account with the owner's activity in the window (§7.12) is listed by no product or kernel, and `account.ignore` does not match it | `report` | item under Account activity — add it to the `repos` of its product or kernel, registering a new product as an idea, or ignore it | 4 | planned | — |
+| A2 | A repository listed by a product that is not `active` has the owner's activity in the window | `report` | item under Account activity — make the product active within the limit, with its decision, or stop working on it | 4 | planned | — |
+| A3 | A repository in `repos` whose owner is the account is not among the account's repositories | `report` | item under Account activity — correct the name, or remove it | 4 | planned | — |
 
 ## 7. Operational definitions
 
@@ -347,17 +371,24 @@ The report is Markdown on standard output, with these sections in this order:
 8. **Changes without a decision** — P1: the status and state changes dated from the same
    weekday last week up to today that no decision records, and the transitions §5 does not
    have (§7.9).
-9. **Focus** — this week's focus: the latest `focus` decision dated within the seven days
-   ending today, or the item "No focus recorded this week". Last week's focus: the latest
-   `focus` decision dated before that window, evaluated as `done` (the product's
-   `next_action` changed after the focus date), `left active` (the product is no longer
-   `active`) or `not done`.
-10. **Health** — not items: active products against `wip_limit`; the median clock of
+9. **Account activity** — A1, A2 and A3, from the account scan (§7.12): the repositories
+   worked on outside the portfolio, those of products that are not `active`, and the
+   listed ones the account does not have. Without `PORTFOLIO_ACCOUNT_TOKEN` the section
+   says the account was not scanned, and that is not an item; a scan that was asked for
+   and failed is one item, naming the reason and the fix.
+10. **Focus** — this week's focus: the latest `focus` decision dated within the seven days
+    ending today, or the item "No focus recorded this week". Last week's focus: the latest
+    `focus` decision dated before that window, evaluated as `done` (the product's
+    `next_action` changed after the focus date), `left active` (the product is no longer
+    `active`) or `not done`.
+11. **Health** — not items: active products against `wip_limit`; the median clock of
     active products; the number of stale products; focus completion over the last four
-    evaluated `focus` decisions; the number of kernels in each state (K1); the date of the
-    last commit that touched the data directory.
+    evaluated `focus` decisions; the number of kernels in each state (K1); the repositories
+    with the owner's activity in the window and how many of them are outside the portfolio,
+    when the account was scanned; the date of the last commit that touched the data
+    directory.
 
-The report **has items** when any of sections 1–8 is non-empty or no focus is recorded this
+The report **has items** when any of sections 1–9 is non-empty or no focus is recorded this
 week.
 
 ### 7.5 Publishing (R1)
@@ -388,9 +419,13 @@ These are the public contract and freeze at v1.0.0 (§9.4).
 - `portfolio-ops --version`
 - Composite action (`action.yml`) inputs: `command` (`validate`, `report` or `dashboard`,
   required), `path` (default `.`), `publish` (default `false`), `dry-run` (default
-  `false`), `github-token` (default: the workflow's token), `python-version` (default: the
-  newest supported version). Output: `dashboard`, with `command: dashboard` — the path of
-  the page, outside the workspace.
+  `false`), `github-token` (default: the workflow's token), `account-token` (default:
+  empty — the account is not scanned), `python-version` (default: the newest supported
+  version). Output: `dashboard`, with `command: dashboard` — the path of the page, outside
+  the workspace.
+- Environment: `GITHUB_TOKEN` and `GITHUB_REPOSITORY` for the guard (§7.3) and publishing
+  (§7.5); `PORTFOLIO_ACCOUNT_TOKEN` for the account scan of `report` and `dashboard`
+  (§7.12). The action passes `account-token` to those two commands only.
 
 ### 7.7 Exit codes
 
@@ -457,8 +492,12 @@ The troubleshooting table in `CONTRIBUTING.md` is keyed on these messages.
   actions and clocks; the ideas; the paused and dormant products, the soonest review
   first; the archived products; the kernels with their state and consumers; the risks,
   those that count as open first; the findings, the soonest to expire first; which
-  products and kernels share each capability; and the ten latest decisions with their
-  text.
+  products and kernels share each capability; the ten latest decisions with their text;
+  and the account's repositories (§7.12) — forks and archived ones only when `repos` lists
+  them — each with the product or kernel that lists it, the latest push first. When the
+  account was scanned, the products panels show the latest push of each product's
+  repositories and the summary counts the repositories worked on outside the plan (A1,
+  A2); otherwise the repositories panel says why the account was not scanned.
 - It goes to standard output, or to `--output FILE`. Without git history — outside a
   repository, or on a shallow clone — it leaves out the clocks and says why. In the
   composite action it is written outside the workspace, and the output `dashboard` holds
@@ -472,6 +511,42 @@ The troubleshooting table in `CONTRIBUTING.md` is keyed on these messages.
   `accepted_until`. A paused product is exported with its `status_reason` and `review_by`,
   and with its `next_action` when it has one.
 - The export needs no git history.
+
+### 7.12 The account scan (A1–A3)
+
+- **Who asks.** `report` and `dashboard` scan the account when `PORTFOLIO_ACCOUNT_TOKEN`
+  is set. No other command reads the variable, and without it both work as before (P8).
+  The scan reads the account as it is when the command runs; `--today` moves only the
+  window.
+- **The token** is a fine-grained personal access token of the owner, with access to all of
+  the account's repositories and the read-only permission `Metadata`. It is kept as the
+  data repository's Actions secret `PORTFOLIO_ACCOUNT_TOKEN` and passed to the report and
+  dashboard jobs only (§3). It is never printed or logged. A classic token (`ghp_…`) is
+  refused before it is sent anywhere: it cannot be read-only, and one that can read
+  private repositories can write to all of them.
+- **The account's repositories.** The engine asks the GitHub REST API whom the token
+  belongs to — the login — and which repositories that account owns, each with the time
+  of its latest push. Repositories of organisations are not scanned.
+- **The window** runs from the same weekday last week up to today, like the changes the
+  report lists for P1 (§7.4), so two weekly runs leave no gap between them.
+- **The owner's activity.** A repository pushed within the window, not archived, and not a
+  fork unless `repos` lists it, is a candidate. For each candidate the engine reads the
+  latest entry by the login in the repository's activity list — pushes, force pushes,
+  branch changes and merges. The candidate has the owner's activity on that entry's date
+  when it falls within the window; a push by anyone else, Dependabot's for example, does
+  not count. Where the activity list cannot be read, a push by anyone counts, and the
+  report and the dashboard say so and why.
+- **Left out.** The data repository itself: `GITHUB_REPOSITORY` in GitHub Actions, the
+  `origin` remote locally. With `allow_public: true`, private repositories are left out of
+  what the report and the dashboard name, because the report may then be public.
+  `account.ignore` leaves a repository out of A1 only; a repository that `repos` lists is
+  in the portfolio whatever the patterns say.
+- **Names** are compared without regard to case, as GitHub compares them. A renamed
+  repository is listed under its new name, so A3 reports the old one.
+- **Failures.** A rejected token (expired or revoked), a missing permission, a rate limit
+  or a network failure stops the scan. The report then shows one item that names the
+  reason and the fix, the dashboard a note, and standard error a warning. The exit code
+  never changes.
 
 ## 8. Design notes and rejected alternatives
 
@@ -528,6 +603,17 @@ What this tool holds — risks, rejections, stalled projects — is a list of th
 spots. Publishing it by accident cannot be undone, so the engine refuses public data
 repositories unless `allow_public: true` is set deliberately, for example by someone who
 builds in public.
+
+### 8.9 The account is polled, not listened to
+
+GitHub has no webhook for everything in a personal account. Listening would need a GitHub
+App whose webhooks reach a server — a hosted service, which §2 rules out — or a workflow
+and a secret in every repository of the account. A weekly review needs no more than a
+poll from the data repository's own schedule. The workflow's `GITHUB_TOKEN` sees only its
+own repository, so the poll needs a second token. It is optional, fine-grained and
+read-only; a classic token is refused because it cannot be read-only. The engine reads
+the repositories' metadata and activity lists, never their code. Only the owner's own
+activity counts, so Dependabot's pushes do not make a paused product look worked on.
 
 ## 9. Delivery phases and release policy
 
@@ -618,11 +704,20 @@ overview showed, and the hand-maintained overview has been deleted.
   breaking change needs a new major version, and a floating major tag (`v1`) tracks the
   latest release.
 
+### 9.5 Phase 4 — v0.4.0
+
+**Scope:** S8, A1–A3, the report's Account activity section and its Health line, the
+dashboard's repositories, and the action's `account-token` input.
+**Exit criterion:** on the owner's real account, two consecutive weekly reports show no
+item under Account activity — every repository worked on belongs to an active product or
+a kernel, or is ignored.
+
 ## 10. Measures and kill criterion
 
 - The Health section carries the measures that show whether the system works: focus
   completion, the median age of next actions among active products, and the number of stale
-  products over time.
+  products over time. With the account scanned it also counts the repositories worked on
+  outside the portfolio.
 - Kill criterion: if three consecutive reports lead to no change in the data, the overhead
   exceeds the value — cut the system back to validation with the WIP limit.
 - portfolio-ops is itself a product in its owner's portfolio and counts towards the same WIP
@@ -637,6 +732,8 @@ overview showed, and the hand-maintained overview has been deleted.
 | Visibility cannot be determined offline | A local run on a public repository only warns | CI fails closed, and a local run publishes nothing | the repository owner, by committing r1 |
 | Gates know only registered risks and claims | An unregistered problem passes a gate | Stated in §2 and §8.5; discovery is out of scope | the repository owner, by committing r1 |
 | Dates are evaluated in UTC | Day boundaries shift for owners far from UTC | Thresholds are measured in weeks | the repository owner, by committing r1 |
+| The account token reads the metadata of every repository of the account | A leaked token lists the names of private repositories and when they were pushed | The token is read-only and fine-grained, sees no code, expires, lives in an encrypted Actions secret passed to two jobs only, and is optional | the repository owner, by adopting r3 |
+| The activity list may be unreadable with the token's permissions | Pushes by others, such as Dependabot's, count as the owner's work | The report and the dashboard say so and name the reason; the owner can grant the permission GitHub names | the repository owner, by adopting r3 |
 <!-- RISKS:END -->
 
 ## 12. Revision log
@@ -645,3 +742,4 @@ overview showed, and the hand-maintained overview has been deleted.
 |---|---|---|
 | r1 | 2026-09-22 | Initial specification |
 | r2 | 2026-09-23 | Folds in what phases 1–3 decided where r1 was silent, with no change of behaviour: the complete command-line interface and the action's output (§7.6), the report's ten sections (§7.4), change coverage (§7.9), the gates and lookup as commands (§7.10), the views (§7.11), the dashboard job of the caller workflow (§3), decision text (§4.6), and the rule texts of B1, B5, B6, K1, K2 and P2 |
+| r3 | 2026-09-24 | Adds phase 4, the account scan (§7.12, §8.9, §9.5), at the owner's request: `repos` on products and kernels (§4.5), `account.ignore` (§4.2), rules S8 and A1–A3 (§6), the report's Account activity section and Health line (§7.4), the dashboard's repositories (§7.11), the `account-token` input and `PORTFOLIO_ACCOUNT_TOKEN` (§3, §7.6), the account token in the anti-goals (§2), and two accepted risks (§11). The template repository exists (§3) |
